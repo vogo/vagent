@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package agent
+package llm
 
 import (
 	"context"
@@ -30,6 +30,8 @@ import (
 	"testing"
 
 	"github.com/vogo/aimodel"
+	"github.com/vogo/vagent/agent"
+	"github.com/vogo/vagent/memory"
 	"github.com/vogo/vagent/prompt"
 	"github.com/vogo/vagent/schema"
 	"github.com/vogo/vagent/tool"
@@ -90,13 +92,13 @@ func toolCallResponse(toolCallID, funcName, args string) *aimodel.ChatResponse {
 
 // --- Tests ---
 
-func TestNewLLMAgent_Defaults(t *testing.T) {
-	a := NewLLMAgent(Config{})
+func TestNew_Defaults(t *testing.T) {
+	a := New(agent.Config{})
 	if a.maxIterations != defaultMaxIterations {
 		t.Errorf("maxIterations = %d, want %d", a.maxIterations, defaultMaxIterations)
 	}
-	if a.streamBufferSize != defaultStreamBufferSize {
-		t.Errorf("streamBufferSize = %d, want %d", a.streamBufferSize, defaultStreamBufferSize)
+	if a.streamBufferSize != agent.DefaultStreamBufferSize {
+		t.Errorf("streamBufferSize = %d, want %d", a.streamBufferSize, agent.DefaultStreamBufferSize)
 	}
 	if a.ID() != "" {
 		t.Errorf("ID = %q, want empty", a.ID())
@@ -109,9 +111,9 @@ func TestNewLLMAgent_Defaults(t *testing.T) {
 	}
 }
 
-func TestNewLLMAgent_WithOptions(t *testing.T) {
-	a := NewLLMAgent(
-		Config{ID: "agent-1", Name: "test-agent", Description: "a test agent"},
+func TestNew_WithOptions(t *testing.T) {
+	a := New(
+		agent.Config{ID: "agent-1", Name: "test-agent", Description: "a test agent"},
 		WithModel("gpt-4"),
 		WithMaxIterations(5),
 		WithMaxTokens(1024),
@@ -144,8 +146,8 @@ func TestNewLLMAgent_WithOptions(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_NoChatCompleter(t *testing.T) {
-	a := NewLLMAgent(Config{})
+func TestAgent_Run_NoChatCompleter(t *testing.T) {
+	a := New(agent.Config{})
 	_, err := a.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("hi")},
 	})
@@ -157,10 +159,10 @@ func TestLLMAgent_Run_NoChatCompleter(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_SimpleResponse(t *testing.T) {
+func TestAgent_Run_SimpleResponse(t *testing.T) {
 	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("Hello!")}}
-	a := NewLLMAgent(
-		Config{ID: "a1"},
+	a := New(
+		agent.Config{ID: "a1"},
 		WithChatCompleter(mock),
 	)
 
@@ -187,9 +189,9 @@ func TestLLMAgent_Run_SimpleResponse(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_WithSystemPrompt(t *testing.T) {
+func TestAgent_Run_WithSystemPrompt(t *testing.T) {
 	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
-	a := NewLLMAgent(Config{},
+	a := New(agent.Config{},
 		WithChatCompleter(mock),
 		WithSystemPrompt(prompt.StringPrompt("You are helpful.")),
 	)
@@ -214,11 +216,9 @@ func TestLLMAgent_Run_WithSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_WithTemplateSystemPrompt(t *testing.T) {
-	// Go text/template renders missing fields on nil data as "<no value>",
-	// so the system prompt renders successfully and is sent to the LLM.
+func TestAgent_Run_WithTemplateSystemPrompt(t *testing.T) {
 	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
-	a := NewLLMAgent(Config{},
+	a := New(agent.Config{},
 		WithChatCompleter(mock),
 		WithSystemPrompt(prompt.StringPrompt("Hello, {{.User}}!")),
 	)
@@ -240,8 +240,7 @@ func TestLLMAgent_Run_WithTemplateSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_ToolCallLoop(t *testing.T) {
-	// First response: tool call. Second response: stop.
+func TestAgent_Run_ToolCallLoop(t *testing.T) {
 	mock := &mockChatCompleter{
 		responses: []*aimodel.ChatResponse{
 			toolCallResponse("tc-1", "get_weather", `{"city":"Paris"}`),
@@ -257,8 +256,8 @@ func TestLLMAgent_Run_ToolCallLoop(t *testing.T) {
 		},
 	)
 
-	a := NewLLMAgent(
-		Config{ID: "weather-agent"},
+	a := New(
+		agent.Config{ID: "weather-agent"},
 		WithChatCompleter(mock),
 		WithToolRegistry(reg),
 	)
@@ -273,17 +272,14 @@ func TestLLMAgent_Run_ToolCallLoop(t *testing.T) {
 		t.Errorf("final response = %q", resp.Messages[0].Content.Text())
 	}
 
-	// Two LLM calls: one returned tool_calls, one returned stop.
 	if mock.calls != 2 {
 		t.Errorf("LLM calls = %d, want 2", mock.calls)
 	}
 
-	// Usage accumulated across iterations.
 	if resp.Usage.TotalTokens != 30 {
 		t.Errorf("TotalTokens = %d, want 30", resp.Usage.TotalTokens)
 	}
 
-	// Second request should include tool result message.
 	secondReq := mock.requests[1]
 	lastMsg := secondReq.Messages[len(secondReq.Messages)-1]
 	if lastMsg.Role != aimodel.RoleTool {
@@ -297,8 +293,7 @@ func TestLLMAgent_Run_ToolCallLoop(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_ToolExecutionError(t *testing.T) {
-	// Tool errors should be fed back to LLM as ErrorResult, not abort the loop.
+func TestAgent_Run_ToolExecutionError(t *testing.T) {
 	mock := &mockChatCompleter{
 		responses: []*aimodel.ChatResponse{
 			toolCallResponse("tc-1", "failing_tool", "{}"),
@@ -314,7 +309,7 @@ func TestLLMAgent_Run_ToolExecutionError(t *testing.T) {
 		},
 	)
 
-	a := NewLLMAgent(Config{},
+	a := New(agent.Config{},
 		WithChatCompleter(mock),
 		WithToolRegistry(reg),
 	)
@@ -329,7 +324,6 @@ func TestLLMAgent_Run_ToolExecutionError(t *testing.T) {
 		t.Errorf("response = %q", resp.Messages[0].Content.Text())
 	}
 
-	// Verify the error was fed back to LLM.
 	secondReq := mock.requests[1]
 	lastMsg := secondReq.Messages[len(secondReq.Messages)-1]
 	if lastMsg.Content.Text() != "connection refused" {
@@ -337,8 +331,7 @@ func TestLLMAgent_Run_ToolExecutionError(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_MaxIterationsExceeded(t *testing.T) {
-	// Always returns tool calls, never stops.
+func TestAgent_Run_MaxIterationsExceeded(t *testing.T) {
 	mock := &mockChatCompleter{
 		responses: []*aimodel.ChatResponse{
 			toolCallResponse("tc-1", "loop", "{}"),
@@ -355,7 +348,7 @@ func TestLLMAgent_Run_MaxIterationsExceeded(t *testing.T) {
 		},
 	)
 
-	a := NewLLMAgent(Config{},
+	a := New(agent.Config{},
 		WithChatCompleter(mock),
 		WithToolRegistry(reg),
 		WithMaxIterations(2),
@@ -372,9 +365,9 @@ func TestLLMAgent_Run_MaxIterationsExceeded(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_ChatCompletionError(t *testing.T) {
+func TestAgent_Run_ChatCompletionError(t *testing.T) {
 	mock := &mockChatCompleter{err: errors.New("API error")}
-	a := NewLLMAgent(Config{}, WithChatCompleter(mock))
+	a := New(agent.Config{}, WithChatCompleter(mock))
 
 	_, err := a.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("hi")},
@@ -387,11 +380,11 @@ func TestLLMAgent_Run_ChatCompletionError(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_EmptyResponse(t *testing.T) {
+func TestAgent_Run_EmptyResponse(t *testing.T) {
 	mock := &mockChatCompleter{
 		responses: []*aimodel.ChatResponse{{Choices: nil, Usage: aimodel.Usage{}}},
 	}
-	a := NewLLMAgent(Config{}, WithChatCompleter(mock))
+	a := New(agent.Config{}, WithChatCompleter(mock))
 
 	_, err := a.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("hi")},
@@ -404,9 +397,9 @@ func TestLLMAgent_Run_EmptyResponse(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_OptionsOverride(t *testing.T) {
+func TestAgent_Run_OptionsOverride(t *testing.T) {
 	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
-	a := NewLLMAgent(Config{},
+	a := New(agent.Config{},
 		WithChatCompleter(mock),
 		WithModel("default-model"),
 		WithTemperature(0.5),
@@ -437,14 +430,14 @@ func TestLLMAgent_Run_OptionsOverride(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_ToolFilter(t *testing.T) {
+func TestAgent_Run_ToolFilter(t *testing.T) {
 	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
 
 	reg := tool.NewRegistry()
 	_ = reg.Register(schema.ToolDef{Name: "allowed"}, echoToolHandler)
 	_ = reg.Register(schema.ToolDef{Name: "blocked"}, echoToolHandler)
 
-	a := NewLLMAgent(Config{},
+	a := New(agent.Config{},
 		WithChatCompleter(mock),
 		WithToolRegistry(reg),
 	)
@@ -466,9 +459,9 @@ func TestLLMAgent_Run_ToolFilter(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_SessionIDPassthrough(t *testing.T) {
+func TestAgent_Run_SessionIDPassthrough(t *testing.T) {
 	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
-	a := NewLLMAgent(Config{}, WithChatCompleter(mock))
+	a := New(agent.Config{}, WithChatCompleter(mock))
 
 	resp, err := a.Run(context.Background(), &schema.RunRequest{
 		Messages:  []schema.Message{schema.NewUserMessage("hi")},
@@ -482,10 +475,10 @@ func TestLLMAgent_Run_SessionIDPassthrough(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Tools_WithRegistry(t *testing.T) {
+func TestAgent_Tools_WithRegistry(t *testing.T) {
 	reg := tool.NewRegistry()
 	_ = reg.Register(schema.ToolDef{Name: "t1"}, echoToolHandler)
-	a := NewLLMAgent(Config{}, WithToolRegistry(reg))
+	a := New(agent.Config{}, WithToolRegistry(reg))
 	tools := a.Tools()
 	if len(tools) != 1 {
 		t.Fatalf("len(Tools) = %d, want 1", len(tools))
@@ -497,9 +490,9 @@ func TestLLMAgent_Tools_WithRegistry(t *testing.T) {
 
 func TestRunText(t *testing.T) {
 	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("world")}}
-	a := NewLLMAgent(Config{}, WithChatCompleter(mock))
+	a := New(agent.Config{}, WithChatCompleter(mock))
 
-	resp, err := RunText(context.Background(), a, "hello")
+	resp, err := agent.RunText(context.Background(), a, "hello")
 	if err != nil {
 		t.Fatalf("RunText error: %v", err)
 	}
@@ -517,12 +510,12 @@ func TestRunText(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_Run_ContextCanceled(t *testing.T) {
+func TestAgent_Run_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	mock := &mockChatCompleter{err: ctx.Err()}
-	a := NewLLMAgent(Config{}, WithChatCompleter(mock))
+	a := New(agent.Config{}, WithChatCompleter(mock))
 
 	_, err := a.Run(ctx, &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("hi")},
@@ -539,7 +532,6 @@ func echoToolHandler(_ context.Context, name, args string) (schema.ToolResult, e
 // --- Streaming tests ---
 
 // sseStreamServer creates an httptest.Server that serves OpenAI-compatible SSE responses.
-// Each call to ChatCompletionStream cycles through the provided response sets.
 func sseStreamServer(t *testing.T, responseSets [][]string) *httptest.Server {
 	t.Helper()
 
@@ -572,17 +564,14 @@ func sseStreamServer(t *testing.T, responseSets [][]string) *httptest.Server {
 	}))
 }
 
-// textDeltaChunk returns an SSE JSON chunk with a text content delta.
 func textDeltaChunk(text string) string {
 	return fmt.Sprintf(`{"id":"1","object":"chat.completion.chunk","created":1,"model":"test","choices":[{"index":0,"delta":{"role":"assistant","content":%s},"finish_reason":null}]}`, mustMarshal(text))
 }
 
-// stopChunk returns an SSE JSON chunk with finish_reason=stop.
 func stopChunk() string {
 	return `{"id":"1","object":"chat.completion.chunk","created":1,"model":"test","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`
 }
 
-// toolCallChunks returns SSE JSON chunks that build up a tool call across multiple deltas.
 func toolCallChunks(id, name, args string) []string {
 	return []string{
 		fmt.Sprintf(`{"id":"1","object":"chat.completion.chunk","created":1,"model":"test","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":%s,"type":"function","function":{"name":%s,"arguments":""}}]},"finish_reason":null}]}`, mustMarshal(id), mustMarshal(name)),
@@ -596,7 +585,7 @@ func mustMarshal(v any) string {
 	return string(b)
 }
 
-func TestLLMAgent_RunStream_SimpleText(t *testing.T) {
+func TestAgent_RunStream_SimpleText(t *testing.T) {
 	srv := sseStreamServer(t, [][]string{
 		{textDeltaChunk("Hello"), textDeltaChunk(" world"), stopChunk()},
 	})
@@ -607,8 +596,8 @@ func TestLLMAgent_RunStream_SimpleText(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := NewLLMAgent(
-		Config{ID: "test-agent"},
+	a := New(
+		agent.Config{ID: "test-agent"},
 		WithChatCompleter(client),
 	)
 
@@ -632,7 +621,6 @@ func TestLLMAgent_RunStream_SimpleText(t *testing.T) {
 		events = append(events, e)
 	}
 
-	// Expect: AgentStart, IterationStart, TextDelta("Hello"), TextDelta(" world"), AgentEnd
 	if len(events) < 5 {
 		t.Fatalf("got %d events, want >= 5", len(events))
 	}
@@ -651,7 +639,6 @@ func TestLLMAgent_RunStream_SimpleText(t *testing.T) {
 		t.Errorf("events[1].Type = %q, want %q", events[1].Type, schema.EventIterationStart)
 	}
 
-	// Collect text deltas.
 	var text strings.Builder
 	for _, e := range events {
 		if e.Type == schema.EventTextDelta {
@@ -679,8 +666,7 @@ func TestLLMAgent_RunStream_SimpleText(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_RunStream_ToolCallLoop(t *testing.T) {
-	// First response: tool call. Second response: text.
+func TestAgent_RunStream_ToolCallLoop(t *testing.T) {
 	tcChunks := toolCallChunks("tc-1", "get_weather", `{"city":"Paris"}`)
 	textChunks := []string{textDeltaChunk("Sunny"), stopChunk()}
 
@@ -700,8 +686,8 @@ func TestLLMAgent_RunStream_ToolCallLoop(t *testing.T) {
 		},
 	)
 
-	a := NewLLMAgent(
-		Config{ID: "weather-agent"},
+	a := New(
+		agent.Config{ID: "weather-agent"},
 		WithChatCompleter(client),
 		WithToolRegistry(reg),
 	)
@@ -725,8 +711,6 @@ func TestLLMAgent_RunStream_ToolCallLoop(t *testing.T) {
 		types = append(types, e.Type)
 	}
 
-	// Expect: AgentStart, IterationStart(0), ToolCallStart, ToolCallEnd, ToolResult,
-	//         IterationStart(1), TextDelta("Sunny"), AgentEnd
 	wantTypes := []string{
 		schema.EventAgentStart,
 		schema.EventIterationStart,
@@ -747,8 +731,7 @@ func TestLLMAgent_RunStream_ToolCallLoop(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_RunStream_CloseEarly(t *testing.T) {
-	// Server sends many chunks, but we close early.
+func TestAgent_RunStream_CloseEarly(t *testing.T) {
 	var manyChunks []string
 	for range 50 {
 		manyChunks = append(manyChunks, textDeltaChunk("x"))
@@ -763,7 +746,7 @@ func TestLLMAgent_RunStream_CloseEarly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := NewLLMAgent(Config{}, WithChatCompleter(client))
+	a := New(agent.Config{}, WithChatCompleter(client))
 	rs, err := a.RunStream(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("hi")},
 	})
@@ -771,7 +754,6 @@ func TestLLMAgent_RunStream_CloseEarly(t *testing.T) {
 		t.Fatalf("RunStream error: %v", err)
 	}
 
-	// Read just the first event (AgentStart).
 	e, err := rs.Recv()
 	if err != nil {
 		t.Fatalf("Recv error: %v", err)
@@ -780,20 +762,17 @@ func TestLLMAgent_RunStream_CloseEarly(t *testing.T) {
 		t.Errorf("first event Type = %q, want %q", e.Type, schema.EventAgentStart)
 	}
 
-	// Close early.
 	if err := rs.Close(); err != nil {
 		t.Fatalf("Close error: %v", err)
 	}
 
-	// Subsequent Recv returns ErrRunStreamClosed.
 	_, err = rs.Recv()
 	if !errors.Is(err, schema.ErrRunStreamClosed) {
 		t.Errorf("Recv after close error = %v, want ErrRunStreamClosed", err)
 	}
 }
 
-func TestLLMAgent_RunStream_MaxIterations(t *testing.T) {
-	// Always returns tool calls.
+func TestAgent_RunStream_MaxIterations(t *testing.T) {
 	tcChunks1 := toolCallChunks("tc-1", "loop", "{}")
 	tcChunks2 := toolCallChunks("tc-2", "loop", "{}")
 
@@ -813,7 +792,7 @@ func TestLLMAgent_RunStream_MaxIterations(t *testing.T) {
 		},
 	)
 
-	a := NewLLMAgent(Config{},
+	a := New(agent.Config{},
 		WithChatCompleter(client),
 		WithToolRegistry(reg),
 		WithMaxIterations(1),
@@ -826,7 +805,6 @@ func TestLLMAgent_RunStream_MaxIterations(t *testing.T) {
 		t.Fatalf("RunStream error: %v", err)
 	}
 
-	// Drain all events -- the producer should return a max iterations error.
 	var lastErr error
 	for {
 		_, recvErr := rs.Recv()
@@ -844,8 +822,8 @@ func TestLLMAgent_RunStream_MaxIterations(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_RunStream_NoChatCompleter(t *testing.T) {
-	a := NewLLMAgent(Config{})
+func TestAgent_RunStream_NoChatCompleter(t *testing.T) {
+	a := New(agent.Config{})
 	_, err := a.RunStream(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("hi")},
 	})
@@ -868,8 +846,8 @@ func TestRunStreamText(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := NewLLMAgent(Config{}, WithChatCompleter(client))
-	rs, err := RunStreamText(context.Background(), a, "hello")
+	a := New(agent.Config{}, WithChatCompleter(client))
+	rs, err := agent.RunStreamText(context.Background(), a, "hello")
 	if err != nil {
 		t.Fatalf("RunStreamText error: %v", err)
 	}
@@ -886,7 +864,6 @@ func TestRunStreamText(t *testing.T) {
 		types = append(types, e.Type)
 	}
 
-	// AgentStart, IterationStart, TextDelta, AgentEnd
 	if len(types) != 4 {
 		t.Fatalf("got %d events, want 4: %v", len(types), types)
 	}
@@ -898,11 +875,11 @@ func TestRunStreamText(t *testing.T) {
 	}
 }
 
-func TestLLMAgent_RunStream_StreamAgentInterface(t *testing.T) {
-	var _ StreamAgent = (*LLMAgent)(nil)
+func TestAgent_RunStream_StreamAgentInterface(t *testing.T) {
+	var _ agent.StreamAgent = (*Agent)(nil)
 }
 
-func TestLLMAgent_RunStream_Middleware(t *testing.T) {
+func TestAgent_RunStream_Middleware(t *testing.T) {
 	srv := sseStreamServer(t, [][]string{
 		{textDeltaChunk("hi"), stopChunk()},
 	})
@@ -922,7 +899,7 @@ func TestLLMAgent_RunStream_Middleware(t *testing.T) {
 		}
 	}
 
-	a := NewLLMAgent(Config{},
+	a := New(agent.Config{},
 		WithChatCompleter(client),
 		WithStreamMiddleware(countMiddleware),
 	)
@@ -944,22 +921,164 @@ func TestLLMAgent_RunStream_Middleware(t *testing.T) {
 		}
 	}
 
-	// AgentStart + IterationStart + TextDelta + AgentEnd = 4
 	if count.Load() != 4 {
 		t.Errorf("middleware called %d times, want 4", count.Load())
 	}
 }
 
+func TestAgent_Run_WithMemory(t *testing.T) {
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("Hello!")}}
+
+	session := memory.NewSessionMemory("agent-1", "sess-1")
+	mgr := memory.NewManager(memory.WithSession(session))
+
+	a := New(
+		agent.Config{ID: "agent-1"},
+		WithChatCompleter(mock),
+		WithMemory(mgr),
+	)
+
+	resp, err := a.Run(context.Background(), &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("hi")},
+		SessionID: "sess-1",
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	if resp.Messages[0].Content.Text() != "Hello!" {
+		t.Errorf("response = %q, want %q", resp.Messages[0].Content.Text(), "Hello!")
+	}
+
+	entries, err := session.List(context.Background(), "msg:")
+	if err != nil {
+		t.Fatalf("List error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("session entries = %d, want 2", len(entries))
+	}
+}
+
+func TestAgent_Run_WithMemory_MultiTurn(t *testing.T) {
+	session := memory.NewSessionMemory("agent-1", "sess-1")
+	mgr := memory.NewManager(memory.WithSession(session))
+
+	mock1 := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("I'm fine!")}}
+	a1 := New(
+		agent.Config{ID: "agent-1"},
+		WithChatCompleter(mock1),
+		WithMemory(mgr),
+	)
+
+	_, err := a1.Run(context.Background(), &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("How are you?")},
+		SessionID: "sess-1",
+	})
+	if err != nil {
+		t.Fatalf("Run 1 error: %v", err)
+	}
+
+	mock2 := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("Your name is Alice!")}}
+	a2 := New(
+		agent.Config{ID: "agent-1"},
+		WithChatCompleter(mock2),
+		WithMemory(mgr),
+	)
+
+	_, err = a2.Run(context.Background(), &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("What's my name?")},
+		SessionID: "sess-1",
+	})
+	if err != nil {
+		t.Fatalf("Run 2 error: %v", err)
+	}
+
+	req := mock2.requests[0]
+	if len(req.Messages) < 3 {
+		t.Fatalf("second request messages = %d, want >= 3", len(req.Messages))
+	}
+
+	if req.Messages[0].Role != aimodel.RoleUser {
+		t.Errorf("Messages[0].Role = %q, want %q", req.Messages[0].Role, aimodel.RoleUser)
+	}
+	if req.Messages[0].Content.Text() != "How are you?" {
+		t.Errorf("Messages[0].Content = %q, want %q", req.Messages[0].Content.Text(), "How are you?")
+	}
+}
+
+func TestAgent_Run_WithMemory_Compressor(t *testing.T) {
+	session := memory.NewSessionMemory("agent-1", "sess-1")
+	compressor := memory.NewSlidingWindowCompressor(1)
+	mgr := memory.NewManager(
+		memory.WithSession(session),
+		memory.WithCompressor(compressor),
+	)
+
+	ctx := context.Background()
+
+	_ = session.Set(ctx, "msg:0", schema.NewUserMessage("first"), 0)
+	_ = session.Set(ctx, "msg:1", schema.NewUserMessage("second"), 0)
+	_ = session.Set(ctx, "msg:2", schema.NewUserMessage("third"), 0)
+
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
+	a := New(
+		agent.Config{ID: "agent-1"},
+		WithChatCompleter(mock),
+		WithMemory(mgr),
+	)
+
+	_, err := a.Run(ctx, &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("current")},
+		SessionID: "sess-1",
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	req := mock.requests[0]
+	if len(req.Messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(req.Messages))
+	}
+	if req.Messages[0].Content.Text() != "third" {
+		t.Errorf("Messages[0] = %q, want %q", req.Messages[0].Content.Text(), "third")
+	}
+	if req.Messages[1].Content.Text() != "current" {
+		t.Errorf("Messages[1] = %q, want %q", req.Messages[1].Content.Text(), "current")
+	}
+}
+
+func TestAgent_Run_WithoutMemory_Unchanged(t *testing.T) {
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
+	a := New(
+		agent.Config{ID: "agent-1"},
+		WithChatCompleter(mock),
+	)
+
+	resp, err := a.Run(context.Background(), &schema.RunRequest{
+		Messages: []schema.Message{schema.NewUserMessage("hi")},
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	if resp.Messages[0].Content.Text() != "ok" {
+		t.Errorf("response = %q, want %q", resp.Messages[0].Content.Text(), "ok")
+	}
+
+	req := mock.requests[0]
+	if len(req.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(req.Messages))
+	}
+}
+
 func TestRunToStream(t *testing.T) {
 	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("hello")}}
-	a := NewLLMAgent(Config{ID: "test-agent"}, WithChatCompleter(mock))
+	a := New(agent.Config{ID: "test-agent"}, WithChatCompleter(mock))
 
 	req := &schema.RunRequest{
 		Messages:  []schema.Message{schema.NewUserMessage("hi")},
 		SessionID: "s1",
 	}
 
-	rs := RunToStream(context.Background(), a, req)
+	rs := agent.RunToStream(context.Background(), a, req)
 
 	var events []schema.Event
 	for {

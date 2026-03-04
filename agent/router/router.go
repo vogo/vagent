@@ -15,46 +15,47 @@
  * limitations under the License.
  */
 
-package agent
+package router
 
 import (
 	"context"
 	"errors"
 
+	"github.com/vogo/vagent/agent"
 	"github.com/vogo/vagent/schema"
 )
 
 // Route pairs an Agent with a description used for routing decisions.
 type Route struct {
-	Agent       Agent
+	Agent       agent.Agent
 	Description string
 }
 
-// RouterFunc selects which agent to route a request to.
-type RouterFunc func(ctx context.Context, req *schema.RunRequest, routes []Route) (Agent, error)
+// Func selects which agent to route a request to.
+type Func func(ctx context.Context, req *schema.RunRequest, routes []Route) (agent.Agent, error)
 
-// RouterAgent routes requests to one of several sub-agents based on a RouterFunc.
-type RouterAgent struct {
-	agentMeta
+// Agent routes requests to one of several sub-agents based on a Func.
+type Agent struct {
+	agent.Base
 	routes     []Route
-	routerFunc RouterFunc
+	routerFunc Func
 }
 
-var _ Agent = (*RouterAgent)(nil)
+var _ agent.Agent = (*Agent)(nil)
 
-// RouterOption configures a RouterAgent.
-type RouterOption func(*RouterAgent)
+// Option configures a router Agent.
+type Option func(*Agent)
 
-// WithRouterFunc sets the routing function for a RouterAgent.
-func WithRouterFunc(fn RouterFunc) RouterOption {
-	return func(a *RouterAgent) { a.routerFunc = fn }
+// WithFunc sets the routing function for a router Agent.
+func WithFunc(fn Func) Option {
+	return func(a *Agent) { a.routerFunc = fn }
 }
 
-// NewRouterAgent creates a RouterAgent with the given routes and options.
-func NewRouterAgent(cfg Config, routes []Route, opts ...RouterOption) *RouterAgent {
-	a := &RouterAgent{
-		agentMeta: newAgentMeta(cfg),
-		routes:    routes,
+// New creates a router Agent with the given routes and options.
+func New(cfg agent.Config, routes []Route, opts ...Option) *Agent {
+	a := &Agent{
+		Base:   agent.NewBase(cfg),
+		routes: routes,
 	}
 	for _, o := range opts {
 		o(a)
@@ -63,6 +64,6 @@ func NewRouterAgent(cfg Config, routes []Route, opts ...RouterOption) *RouterAge
 }
 
 // Run is not yet implemented.
-func (a *RouterAgent) Run(_ context.Context, _ *schema.RunRequest) (*schema.RunResponse, error) {
-	return nil, errors.New("vagent: RouterAgent.Run not yet implemented")
+func (a *Agent) Run(_ context.Context, _ *schema.RunRequest) (*schema.RunResponse, error) {
+	return nil, errors.New("vagent: router.Agent.Run not yet implemented")
 }

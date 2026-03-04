@@ -15,35 +15,33 @@
  * limitations under the License.
  */
 
-package agent
+package workflow
 
 import (
 	"context"
 	"errors"
 
+	"github.com/vogo/vagent/agent"
 	"github.com/vogo/vagent/schema"
 )
 
-// CustomAgent delegates its Run to a user-provided RunFunc.
-type CustomAgent struct {
-	Base
-	runFunc RunFunc
+// Agent executes a sequence of sub-agents in order.
+type Agent struct {
+	agent.Base
+	steps []agent.Agent
 }
 
-var _ Agent = (*CustomAgent)(nil)
+var _ agent.Agent = (*Agent)(nil)
 
-// NewCustomAgent creates a CustomAgent with the given RunFunc.
-func NewCustomAgent(cfg Config, fn RunFunc) *CustomAgent {
-	return &CustomAgent{
-		Base:    NewBase(cfg),
-		runFunc: fn,
+// New creates a workflow Agent that runs the given steps sequentially.
+func New(cfg agent.Config, steps ...agent.Agent) *Agent {
+	return &Agent{
+		Base:  agent.NewBase(cfg),
+		steps: steps,
 	}
 }
 
-// Run delegates to the configured RunFunc. Returns an error if RunFunc is nil.
-func (a *CustomAgent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
-	if a.runFunc == nil {
-		return nil, errors.New("vagent: CustomAgent has no RunFunc configured")
-	}
-	return a.runFunc(ctx, req)
+// Run is not yet implemented.
+func (a *Agent) Run(_ context.Context, _ *schema.RunRequest) (*schema.RunResponse, error) {
+	return nil, errors.New("vagent: workflow.Agent.Run not yet implemented")
 }

@@ -14,6 +14,6 @@ format:
 		gofumpt -w .
 
 test:
-		go test ./... -v
+		go test ./... -coverprofile=coverage.out -covermode=atomic -v 
 
 build: license-check format lint test

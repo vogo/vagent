@@ -15,35 +15,38 @@
  * limitations under the License.
  */
 
-package agent
+package dag
 
 import (
 	"context"
-	"errors"
+	"strings"
+	"testing"
 
+	"github.com/vogo/vagent/agent"
 	"github.com/vogo/vagent/schema"
 )
 
-// CustomAgent delegates its Run to a user-provided RunFunc.
-type CustomAgent struct {
-	Base
-	runFunc RunFunc
-}
-
-var _ Agent = (*CustomAgent)(nil)
-
-// NewCustomAgent creates a CustomAgent with the given RunFunc.
-func NewCustomAgent(cfg Config, fn RunFunc) *CustomAgent {
-	return &CustomAgent{
-		Base:    NewBase(cfg),
-		runFunc: fn,
+func TestAgent_Config(t *testing.T) {
+	nodes := []Node{
+		{ID: "n1", Agent: agent.NewCustomAgent(agent.Config{ID: "sub-1"}, nil)},
+		{ID: "n2", Agent: agent.NewCustomAgent(agent.Config{ID: "sub-2"}, nil), Deps: []string{"n1"}},
+	}
+	a := New(agent.Config{ID: "dag-1", Name: "dag"}, nodes)
+	if a.ID() != "dag-1" {
+		t.Errorf("ID = %q, want %q", a.ID(), "dag-1")
+	}
+	if a.Name() != "dag" {
+		t.Errorf("Name = %q, want %q", a.Name(), "dag")
 	}
 }
 
-// Run delegates to the configured RunFunc. Returns an error if RunFunc is nil.
-func (a *CustomAgent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
-	if a.runFunc == nil {
-		return nil, errors.New("vagent: CustomAgent has no RunFunc configured")
+func TestAgent_Run_Stub(t *testing.T) {
+	a := New(agent.Config{ID: "dag-1"}, nil)
+	_, err := a.Run(context.Background(), &schema.RunRequest{})
+	if err == nil {
+		t.Fatal("expected error from stub")
 	}
-	return a.runFunc(ctx, req)
+	if !strings.Contains(err.Error(), "not yet implemented") {
+		t.Errorf("error = %q, want 'not yet implemented'", err.Error())
+	}
 }

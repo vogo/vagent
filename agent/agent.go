@@ -24,6 +24,9 @@ import (
 	"github.com/vogo/vagent/schema"
 )
 
+// DefaultStreamBufferSize is the default channel buffer size for streaming events.
+const DefaultStreamBufferSize = 32
+
 // Agent is the core interface for all agent types.
 type Agent interface {
 	Run(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error)
@@ -39,24 +42,25 @@ type Config struct {
 	Description string
 }
 
-// agentMeta implements ID/Name/Description for embedding into concrete agent types.
-type agentMeta struct {
-	id          string
-	name        string
-	description string
+// Base implements ID/Name/Description for embedding into concrete agent types.
+type Base struct {
+	AgentID          string
+	AgentName        string
+	AgentDescription string
 }
 
-func newAgentMeta(cfg Config) agentMeta {
-	return agentMeta{
-		id:          cfg.ID,
-		name:        cfg.Name,
-		description: cfg.Description,
+// NewBase creates a Base from the given Config.
+func NewBase(cfg Config) Base {
+	return Base{
+		AgentID:          cfg.ID,
+		AgentName:        cfg.Name,
+		AgentDescription: cfg.Description,
 	}
 }
 
-func (m *agentMeta) ID() string          { return m.id }
-func (m *agentMeta) Name() string        { return m.name }
-func (m *agentMeta) Description() string { return m.description }
+func (m *Base) ID() string          { return m.AgentID }
+func (m *Base) Name() string        { return m.AgentName }
+func (m *Base) Description() string { return m.AgentDescription }
 
 // StreamAgent extends Agent with streaming support.
 type StreamAgent interface {
@@ -88,7 +92,7 @@ func RunStreamText(ctx context.Context, a StreamAgent, input string) (*schema.Ru
 // RunToStream wraps a non-streaming Agent.Run call as a RunStream,
 // emitting AgentStart and AgentEnd lifecycle events.
 func RunToStream(ctx context.Context, a Agent, req *schema.RunRequest) *schema.RunStream {
-	return schema.NewRunStream(ctx, defaultStreamBufferSize, func(ctx context.Context, send func(schema.Event) error) error {
+	return schema.NewRunStream(ctx, DefaultStreamBufferSize, func(ctx context.Context, send func(schema.Event) error) error {
 		start := time.Now()
 		agentID := a.ID()
 		sessionID := req.SessionID

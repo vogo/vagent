@@ -25,17 +25,12 @@ import (
 	"github.com/vogo/vagent/schema"
 )
 
-// TestInterfaceCompliance verifies all agent types satisfy the Agent interface.
 func TestInterfaceCompliance(t *testing.T) {
-	var _ Agent = (*LLMAgent)(nil)
-	var _ Agent = (*WorkflowAgent)(nil)
-	var _ Agent = (*RouterAgent)(nil)
-	var _ Agent = (*DAGAgent)(nil)
 	var _ Agent = (*CustomAgent)(nil)
 }
 
-func TestAgentMeta(t *testing.T) {
-	m := newAgentMeta(Config{ID: "id-1", Name: "name-1", Description: "desc-1"})
+func TestBase(t *testing.T) {
+	m := NewBase(Config{ID: "id-1", Name: "name-1", Description: "desc-1"})
 	if m.ID() != "id-1" {
 		t.Errorf("ID = %q, want %q", m.ID(), "id-1")
 	}
@@ -44,89 +39,6 @@ func TestAgentMeta(t *testing.T) {
 	}
 	if m.Description() != "desc-1" {
 		t.Errorf("Description = %q, want %q", m.Description(), "desc-1")
-	}
-}
-
-func TestWorkflowAgent_Config(t *testing.T) {
-	a := NewWorkflowAgent(Config{ID: "wf-1", Name: "workflow", Description: "sequential"})
-	if a.ID() != "wf-1" {
-		t.Errorf("ID = %q, want %q", a.ID(), "wf-1")
-	}
-	if a.Name() != "workflow" {
-		t.Errorf("Name = %q, want %q", a.Name(), "workflow")
-	}
-	if a.Description() != "sequential" {
-		t.Errorf("Description = %q, want %q", a.Description(), "sequential")
-	}
-}
-
-func TestWorkflowAgent_Run_Stub(t *testing.T) {
-	a := NewWorkflowAgent(Config{ID: "wf-1"})
-	_, err := a.Run(context.Background(), &schema.RunRequest{})
-	if err == nil {
-		t.Fatal("expected error from stub")
-	}
-	if !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("error = %q, want 'not yet implemented'", err.Error())
-	}
-}
-
-func TestRouterAgent_Config(t *testing.T) {
-	routes := []Route{
-		{Agent: NewCustomAgent(Config{ID: "sub-1"}, nil), Description: "route one"},
-	}
-	a := NewRouterAgent(Config{ID: "rt-1", Name: "router"}, routes)
-	if a.ID() != "rt-1" {
-		t.Errorf("ID = %q, want %q", a.ID(), "rt-1")
-	}
-	if a.Name() != "router" {
-		t.Errorf("Name = %q, want %q", a.Name(), "router")
-	}
-}
-
-func TestRouterAgent_WithRouterFunc(t *testing.T) {
-	fn := func(_ context.Context, _ *schema.RunRequest, _ []Route) (Agent, error) {
-		return nil, nil
-	}
-	a := NewRouterAgent(Config{}, nil, WithRouterFunc(fn))
-	if a.routerFunc == nil {
-		t.Error("routerFunc should not be nil")
-	}
-}
-
-func TestRouterAgent_Run_Stub(t *testing.T) {
-	a := NewRouterAgent(Config{}, nil)
-	_, err := a.Run(context.Background(), &schema.RunRequest{})
-	if err == nil {
-		t.Fatal("expected error from stub")
-	}
-	if !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("error = %q, want 'not yet implemented'", err.Error())
-	}
-}
-
-func TestDAGAgent_Config(t *testing.T) {
-	nodes := []Node{
-		{ID: "n1", Agent: NewCustomAgent(Config{ID: "sub-1"}, nil)},
-		{ID: "n2", Agent: NewCustomAgent(Config{ID: "sub-2"}, nil), Deps: []string{"n1"}},
-	}
-	a := NewDAGAgent(Config{ID: "dag-1", Name: "dag"}, nodes)
-	if a.ID() != "dag-1" {
-		t.Errorf("ID = %q, want %q", a.ID(), "dag-1")
-	}
-	if a.Name() != "dag" {
-		t.Errorf("Name = %q, want %q", a.Name(), "dag")
-	}
-}
-
-func TestDAGAgent_Run_Stub(t *testing.T) {
-	a := NewDAGAgent(Config{ID: "dag-1"}, nil)
-	_, err := a.Run(context.Background(), &schema.RunRequest{})
-	if err == nil {
-		t.Fatal("expected error from stub")
-	}
-	if !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("error = %q, want 'not yet implemented'", err.Error())
 	}
 }
 

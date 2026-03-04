@@ -15,32 +15,40 @@
  * limitations under the License.
  */
 
-package agent
+package dag
 
 import (
 	"context"
 	"errors"
 
+	"github.com/vogo/vagent/agent"
 	"github.com/vogo/vagent/schema"
 )
 
-// WorkflowAgent executes a sequence of sub-agents in order.
-type WorkflowAgent struct {
-	agentMeta
-	steps []Agent
+// Node is a single node in a DAG execution graph.
+type Node struct {
+	ID    string       // unique identifier for this node
+	Agent agent.Agent  // the agent to execute
+	Deps  []string     // IDs of nodes this node depends on
 }
 
-var _ Agent = (*WorkflowAgent)(nil)
+// Agent executes a directed acyclic graph of sub-agents.
+type Agent struct {
+	agent.Base
+	nodes []Node
+}
 
-// NewWorkflowAgent creates a WorkflowAgent that runs the given steps sequentially.
-func NewWorkflowAgent(cfg Config, steps ...Agent) *WorkflowAgent {
-	return &WorkflowAgent{
-		agentMeta: newAgentMeta(cfg),
-		steps:     steps,
+var _ agent.Agent = (*Agent)(nil)
+
+// New creates a DAG Agent with the given execution nodes.
+func New(cfg agent.Config, nodes []Node) *Agent {
+	return &Agent{
+		Base:  agent.NewBase(cfg),
+		nodes: nodes,
 	}
 }
 
 // Run is not yet implemented.
-func (a *WorkflowAgent) Run(_ context.Context, _ *schema.RunRequest) (*schema.RunResponse, error) {
-	return nil, errors.New("vagent: WorkflowAgent.Run not yet implemented")
+func (a *Agent) Run(_ context.Context, _ *schema.RunRequest) (*schema.RunResponse, error) {
+	return nil, errors.New("vagent: dag.Agent.Run not yet implemented")
 }
