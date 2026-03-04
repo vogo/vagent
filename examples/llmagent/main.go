@@ -25,12 +25,12 @@ import (
 	"io"
 	"log"
 	"math/rand/v2"
-	"os"
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/agent"
 	"github.com/vogo/vagent/agent/llmagent"
 	"github.com/vogo/vagent/hook"
+	"github.com/vogo/vagent/memory"
 	"github.com/vogo/vagent/prompt"
 	"github.com/vogo/vagent/schema"
 	"github.com/vogo/vagent/tool"
@@ -89,6 +89,18 @@ func main() {
 		return nil
 	}))
 
+	// ── Set up memory ────────────────────────────────────────────────
+	// Create a shared MapStore so that session memory survives across runs.
+	// In production you could use NewSessionMemoryWithStore(redisStore, …)
+	// to plug in a Redis-backed Store.
+	sessionStore := memory.NewMapStore()
+	session := memory.NewSessionMemoryWithStore(sessionStore, "weather-agent", "demo-session")
+
+	memoryManager := memory.NewManager(
+		memory.WithSession(session),
+		memory.WithCompressor(memory.NewSlidingWindowCompressor(20)),
+	)
+
 	// Build the LLM agent.
 	a := llmagent.New(agent.Config{
 		ID:   "weather-agent",
@@ -101,32 +113,22 @@ func main() {
 		)),
 		llmagent.WithMaxIterations(5),
 		llmagent.WithHookManager(hm),
+		llmagent.WithMemory(memoryManager),
 	)
 
-	question := "What's the weather in Beijing and Tokyo? Also, what is 42 * 17?"
-
-	if len(os.Args) > 1 && os.Args[1] == "--text" {
-		// Non-streaming mode if --text flag is passed.
-		runText(a, question)
-		return
+	runStreaming(a, "What's the weather in Beijing? Also, what is 42 * 17?")
+	entries, _ := session.List(context.Background(), "msg:")
+	fmt.Printf("\n\n[memory] session entries after turn 1: %d\n\n", len(entries))
+	for _, e := range entries {
+		fmt.Printf("  %s: %s\n", e.Key, e.Value)
 	}
 
-	// Streaming mode
-	runStreaming(a, question)
-}
-
-func runText(a *llmagent.Agent, question string) {
-	resp, err := agent.RunText(context.Background(), a, question)
-	if err != nil {
-		log.Fatal(err)
+	runStreaming(a, "How about Tokyo? Is it warmer than the city I just asked about?")
+	entries, _ = session.List(context.Background(), "msg:")
+	fmt.Printf("\n\n[memory] session entries after turn 2: %d\n\n", len(entries))
+	for _, e := range entries {
+		fmt.Printf("  %s: %s\n", e.Key, e.Value)
 	}
-
-	for _, msg := range resp.Messages {
-		fmt.Println(msg.Content.Text())
-	}
-
-	fmt.Printf("\n--- Usage: prompt=%d completion=%d total=%d, duration=%dms ---\n",
-		resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens, resp.Duration)
 }
 
 func runStreaming(a *llmagent.Agent, question string) {

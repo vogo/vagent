@@ -91,7 +91,7 @@ func (mgr *Manager) Compressor() ContextCompressor {
 
 // PromoteToSession promotes entries from working memory to session memory.
 // Returns an error if promotion fails, but callers should not fail the Run.
-func (mgr *Manager) PromoteToSession(ctx context.Context, working *WorkingMemory) error {
+func (mgr *Manager) PromoteToSession(ctx context.Context, working Memory) error {
 	if mgr.session == nil || mgr.promoter == nil {
 		return nil
 	}

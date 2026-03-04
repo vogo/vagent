@@ -122,14 +122,12 @@ func TestSessionMemory_BatchSetGet(t *testing.T) {
 }
 
 func TestSessionMemory_TTLExpiry(t *testing.T) {
-	m := NewSessionMemory("agent-1", "sess-1")
+	ms := NewMapStore()
+	m := NewSessionMemoryWithStore(ms, "agent-1", "sess-1")
 	ctx := context.Background()
 
 	_ = m.Set(ctx, "expiring", "value", 1)
-
-	m.mu.Lock()
-	m.entries["expiring"].CreatedAt = time.Now().Add(-2 * time.Second)
-	m.mu.Unlock()
+	ms.SetCreatedAtForTest("expiring", time.Now().Add(-2*time.Second))
 
 	val, _ := m.Get(ctx, "expiring")
 	if val != nil {
@@ -138,15 +136,13 @@ func TestSessionMemory_TTLExpiry(t *testing.T) {
 }
 
 func TestSessionMemory_TTLExpiryList(t *testing.T) {
-	m := NewSessionMemory("agent-1", "sess-1")
+	ms := NewMapStore()
+	m := NewSessionMemoryWithStore(ms, "agent-1", "sess-1")
 	ctx := context.Background()
 
 	_ = m.Set(ctx, "alive", "yes", 0)
 	_ = m.Set(ctx, "dead", "no", 1)
-
-	m.mu.Lock()
-	m.entries["dead"].CreatedAt = time.Now().Add(-2 * time.Second)
-	m.mu.Unlock()
+	ms.SetCreatedAtForTest("dead", time.Now().Add(-2*time.Second))
 
 	entries, _ := m.List(ctx, "")
 	if len(entries) != 1 {
@@ -155,15 +151,13 @@ func TestSessionMemory_TTLExpiryList(t *testing.T) {
 }
 
 func TestSessionMemory_TTLExpiryBatchGet(t *testing.T) {
-	m := NewSessionMemory("agent-1", "sess-1")
+	ms := NewMapStore()
+	m := NewSessionMemoryWithStore(ms, "agent-1", "sess-1")
 	ctx := context.Background()
 
 	_ = m.Set(ctx, "alive", "yes", 0)
 	_ = m.Set(ctx, "dead", "no", 1)
-
-	m.mu.Lock()
-	m.entries["dead"].CreatedAt = time.Now().Add(-2 * time.Second)
-	m.mu.Unlock()
+	ms.SetCreatedAtForTest("dead", time.Now().Add(-2*time.Second))
 
 	result, _ := m.BatchGet(ctx, []string{"alive", "dead"})
 	if len(result) != 1 {

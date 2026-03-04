@@ -17,26 +17,24 @@
 
 package memory
 
-// SessionMemory is a per-session in-process memory store.
+// PersistentMemory is a cross-session persistent in-process memory store.
 // It is safe for concurrent use.
-type SessionMemory struct {
+type PersistentMemory struct {
 	syncMemory
 }
 
-// Compile-time check: SessionMemory implements Memory.
-var _ Memory = (*SessionMemory)(nil)
+// Compile-time check: PersistentMemory implements Memory.
+var _ Memory = (*PersistentMemory)(nil)
 
-// NewSessionMemory creates a new SessionMemory backed by an in-memory MapStore.
-func NewSessionMemory(agentID, sessionID string) *SessionMemory {
-	return NewSessionMemoryWithStore(NewMapStore(), agentID, sessionID)
+// NewPersistentMemory creates a new PersistentMemory backed by an in-memory MapStore.
+func NewPersistentMemory() *PersistentMemory {
+	return NewPersistentMemoryWithStore(NewMapStore())
 }
 
-// NewSessionMemoryWithStore creates a new SessionMemory backed by the given Store.
-func NewSessionMemoryWithStore(store Store, agentID, sessionID string) *SessionMemory {
-	return &SessionMemory{syncMemory: syncMemory{memoryBase: memoryBase{
-		store:     store,
-		scope:     ScopeSession,
-		agentID:   agentID,
-		sessionID: sessionID,
+// NewPersistentMemoryWithStore creates a new PersistentMemory backed by the given Store.
+func NewPersistentMemoryWithStore(store Store) *PersistentMemory {
+	return &PersistentMemory{syncMemory: syncMemory{memoryBase: memoryBase{
+		store: store,
+		scope: ScopeStore,
 	}}}
 }

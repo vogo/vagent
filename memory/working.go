@@ -22,16 +22,21 @@ import "context"
 // WorkingMemory is a per-Run in-process memory store.
 // It is not safe for concurrent use (single goroutine per Run).
 type WorkingMemory struct {
-	mapStore
+	memoryBase
 }
 
 // Compile-time check: WorkingMemory implements Memory.
 var _ Memory = (*WorkingMemory)(nil)
 
-// NewWorkingMemory creates a new WorkingMemory for a single Run.
+// NewWorkingMemory creates a new WorkingMemory backed by an in-memory MapStore.
 func NewWorkingMemory(agentID, sessionID string) *WorkingMemory {
-	return &WorkingMemory{mapStore{
-		entries:   make(map[string]*Entry),
+	return NewWorkingMemoryWithStore(NewMapStore(), agentID, sessionID)
+}
+
+// NewWorkingMemoryWithStore creates a new WorkingMemory backed by the given Store.
+func NewWorkingMemoryWithStore(store Store, agentID, sessionID string) *WorkingMemory {
+	return &WorkingMemory{memoryBase{
+		store:     store,
 		scope:     ScopeWorking,
 		agentID:   agentID,
 		sessionID: sessionID,
@@ -42,64 +47,48 @@ func (m *WorkingMemory) Get(ctx context.Context, key string) (any, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-
-	v, _ := m.get(key)
-
-	return v, nil
+	v, _, err := m.store.Get(ctx, key)
+	return v, err
 }
 
 func (m *WorkingMemory) Set(ctx context.Context, key string, value any, ttl int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	m.set(key, value, ttl)
-
-	return nil
+	return m.store.Set(ctx, key, value, ttl)
 }
 
 func (m *WorkingMemory) Delete(ctx context.Context, key string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	m.del(key)
-
-	return nil
+	return m.store.Delete(ctx, key)
 }
 
 func (m *WorkingMemory) List(ctx context.Context, prefix string) ([]Entry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-
-	return m.list(prefix), nil
+	return m.list(ctx, prefix)
 }
 
 func (m *WorkingMemory) Clear(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	m.clear()
-
-	return nil
+	return m.store.Clear(ctx)
 }
 
 func (m *WorkingMemory) BatchGet(ctx context.Context, keys []string) (map[string]any, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-
-	return m.batchGet(keys), nil
+	return m.batchGet(ctx, keys)
 }
 
 func (m *WorkingMemory) BatchSet(ctx context.Context, entries map[string]any, ttl int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	m.batchSet(entries, ttl)
-
-	return nil
+	return m.batchSet(ctx, entries, ttl)
 }

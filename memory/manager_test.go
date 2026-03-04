@@ -45,7 +45,7 @@ func TestNewManager_Defaults(t *testing.T) {
 
 func TestNewManager_WithOptions(t *testing.T) {
 	session := NewSessionMemory("agent-1", "sess-1")
-	store := NewStoreMemory()
+	store := NewPersistentMemory()
 	compressor := NewSlidingWindowCompressor(10)
 
 	mgr := NewManager(
@@ -74,11 +74,19 @@ func TestManager_NewWorkingMemory(t *testing.T) {
 	if wm == nil {
 		t.Fatal("NewWorkingMemory returned nil")
 	}
-	if wm.agentID != "agent-1" {
-		t.Errorf("agentID = %q, want %q", wm.agentID, "agent-1")
+
+	// Verify metadata is stamped on entries via List.
+	ctx := context.Background()
+	_ = wm.Set(ctx, "k", "v", 0)
+	entries, _ := wm.List(ctx, "")
+	if len(entries) != 1 {
+		t.Fatalf("List len = %d, want 1", len(entries))
 	}
-	if wm.sessionID != "sess-1" {
-		t.Errorf("sessionID = %q, want %q", wm.sessionID, "sess-1")
+	if entries[0].AgentID != "agent-1" {
+		t.Errorf("agentID = %q, want %q", entries[0].AgentID, "agent-1")
+	}
+	if entries[0].SessionID != "sess-1" {
+		t.Errorf("sessionID = %q, want %q", entries[0].SessionID, "sess-1")
 	}
 }
 
@@ -180,7 +188,7 @@ func TestManager_PromoteToSession_PromoterError(t *testing.T) {
 
 func TestManager_ArchiveToStore(t *testing.T) {
 	session := NewSessionMemory("agent-1", "sess-1")
-	store := NewStoreMemory()
+	store := NewPersistentMemory()
 	mgr := NewManager(
 		WithSession(session),
 		WithStore(store),
@@ -214,7 +222,7 @@ func TestManager_ArchiveToStore_NoStore(t *testing.T) {
 }
 
 func TestManager_ArchiveToStore_NoSession(t *testing.T) {
-	store := NewStoreMemory()
+	store := NewPersistentMemory()
 	mgr := NewManager(WithStore(store))
 
 	ctx := context.Background()
@@ -226,7 +234,7 @@ func TestManager_ArchiveToStore_NoSession(t *testing.T) {
 
 func TestManager_ArchiveToStore_ArchiveNone(t *testing.T) {
 	session := NewSessionMemory("agent-1", "sess-1")
-	store := NewStoreMemory()
+	store := NewPersistentMemory()
 	mgr := NewManager(
 		WithSession(session),
 		WithStore(store),
@@ -248,7 +256,7 @@ func TestManager_ArchiveToStore_ArchiveNone(t *testing.T) {
 
 func TestManager_ArchiveToStore_ArchiverError(t *testing.T) {
 	session := NewSessionMemory("agent-1", "sess-1")
-	store := NewStoreMemory()
+	store := NewPersistentMemory()
 	errArchiver := ArchiveFunc(func(_ context.Context, _ []Entry) ([]Entry, error) {
 		return nil, errors.New("archive failed")
 	})

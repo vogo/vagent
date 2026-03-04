@@ -22,6 +22,32 @@ import (
 	"time"
 )
 
+// Store is the low-level interface for raw key-value storage backends.
+// Implementations must be safe for use by a single goroutine; the memory
+// tiers provide their own concurrency control when needed.
+type Store interface {
+	Get(ctx context.Context, key string) (any, bool, error)
+	Set(ctx context.Context, key string, value any, ttl int64) error
+	Delete(ctx context.Context, key string) error
+	List(ctx context.Context, prefix string) ([]StoreEntry, error)
+	Clear(ctx context.Context) error
+}
+
+// StoreEntry is a single record returned by Store.List.
+type StoreEntry struct {
+	Key       string
+	Value     any
+	CreatedAt time.Time
+	TTL       int64
+}
+
+// BatchStore is an optional interface that Store implementations can provide
+// for optimised bulk operations.
+type BatchStore interface {
+	BatchGet(ctx context.Context, keys []string) (map[string]any, error)
+	BatchSet(ctx context.Context, entries map[string]any, ttl int64) error
+}
+
 // Scope identifies the memory tier an entry belongs to.
 type Scope string
 
@@ -45,14 +71,6 @@ type Entry struct {
 	TTL       int64     `json:"ttl,omitempty"` // seconds; 0 means no expiry
 }
 
-// IsExpired reports whether the entry has exceeded its TTL.
-func (e *Entry) IsExpired() bool {
-	if e.TTL <= 0 {
-		return false
-	}
-	return time.Since(e.CreatedAt) > time.Duration(e.TTL)*time.Second
-}
-
 // Memory is the core interface for a memory tier.
 type Memory interface {
 	// Get returns the value for the given key, or nil if not found.
@@ -69,13 +87,4 @@ type Memory interface {
 	BatchGet(ctx context.Context, keys []string) (map[string]any, error)
 	// BatchSet stores multiple key-value pairs with the given TTL.
 	BatchSet(ctx context.Context, entries map[string]any, ttl int64) error
-}
-
-// SearchableMemory extends Memory with search and indexing capabilities.
-type SearchableMemory interface {
-	Memory
-	// Search finds entries matching the query string.
-	Search(ctx context.Context, query string, limit int) ([]Entry, error)
-	// Index indexes an entry for search.
-	Index(ctx context.Context, entry Entry) error
 }

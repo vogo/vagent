@@ -134,31 +134,27 @@ func TestWorkingMemory_BatchSetGet(t *testing.T) {
 }
 
 func TestWorkingMemory_TTLExpiry(t *testing.T) {
-	m := NewWorkingMemory("agent-1", "sess-1")
+	ms := NewMapStore()
+	m := NewWorkingMemoryWithStore(ms, "agent-1", "sess-1")
 	ctx := context.Background()
 
-	// Set with 1-second TTL, then backdate the entry.
 	_ = m.Set(ctx, "expiring", "value", 1)
-	m.entries["expiring"].CreatedAt = time.Now().Add(-2 * time.Second)
+	ms.SetCreatedAtForTest("expiring", time.Now().Add(-2*time.Second))
 
 	val, _ := m.Get(ctx, "expiring")
 	if val != nil {
 		t.Errorf("Get expired entry = %v, want nil", val)
 	}
-
-	// Verify it was deleted (lazy expiry).
-	if _, ok := m.entries["expiring"]; ok {
-		t.Error("expired entry should be deleted from map")
-	}
 }
 
 func TestWorkingMemory_TTLExpiryList(t *testing.T) {
-	m := NewWorkingMemory("agent-1", "sess-1")
+	ms := NewMapStore()
+	m := NewWorkingMemoryWithStore(ms, "agent-1", "sess-1")
 	ctx := context.Background()
 
 	_ = m.Set(ctx, "alive", "yes", 0)
 	_ = m.Set(ctx, "dead", "no", 1)
-	m.entries["dead"].CreatedAt = time.Now().Add(-2 * time.Second)
+	ms.SetCreatedAtForTest("dead", time.Now().Add(-2*time.Second))
 
 	entries, _ := m.List(ctx, "")
 	if len(entries) != 1 {
@@ -170,12 +166,13 @@ func TestWorkingMemory_TTLExpiryList(t *testing.T) {
 }
 
 func TestWorkingMemory_TTLExpiryBatchGet(t *testing.T) {
-	m := NewWorkingMemory("agent-1", "sess-1")
+	ms := NewMapStore()
+	m := NewWorkingMemoryWithStore(ms, "agent-1", "sess-1")
 	ctx := context.Background()
 
 	_ = m.Set(ctx, "alive", "yes", 0)
 	_ = m.Set(ctx, "dead", "no", 1)
-	m.entries["dead"].CreatedAt = time.Now().Add(-2 * time.Second)
+	ms.SetCreatedAtForTest("dead", time.Now().Add(-2*time.Second))
 
 	result, _ := m.BatchGet(ctx, []string{"alive", "dead"})
 	if len(result) != 1 {

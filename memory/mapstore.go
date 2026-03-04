@@ -18,94 +18,118 @@
 package memory
 
 import (
+	"context"
 	"strings"
 	"time"
 )
 
-// mapStore is the common map-based storage logic shared by all memory tiers.
+// storeRecord is the internal representation of a stored value inside MapStore.
+type storeRecord struct {
+	value     any
+	createdAt time.Time
+	ttl       int64
+}
+
+func (r *storeRecord) isExpired() bool {
+	if r.ttl <= 0 {
+		return false
+	}
+	return time.Since(r.createdAt) > time.Duration(r.ttl)*time.Second
+}
+
+// Compile-time checks.
+var (
+	_ Store      = (*MapStore)(nil)
+	_ BatchStore = (*MapStore)(nil)
+)
+
+// MapStore is an in-memory Store backed by a plain Go map.
 // It is not safe for concurrent use; callers must provide their own locking.
-type mapStore struct {
-	entries   map[string]*Entry
-	scope     Scope
-	agentID   string
-	sessionID string
+type MapStore struct {
+	entries map[string]*storeRecord
 }
 
-func (s *mapStore) get(key string) (any, bool) {
-	e, ok := s.entries[key]
+// NewMapStore creates a new MapStore.
+func NewMapStore() *MapStore {
+	return &MapStore{entries: make(map[string]*storeRecord)}
+}
+
+func (s *MapStore) Get(_ context.Context, key string) (any, bool, error) {
+	r, ok := s.entries[key]
 	if !ok {
-		return nil, false
+		return nil, false, nil
 	}
-
-	if e.IsExpired() {
+	if r.isExpired() {
 		delete(s.entries, key)
-		return nil, false
+		return nil, false, nil
 	}
-
-	return e.Value, true
+	return r.value, true, nil
 }
 
-func (s *mapStore) set(key string, value any, ttl int64) {
-	s.entries[key] = &Entry{
-		Key:       key,
-		Value:     value,
-		Scope:     s.scope,
-		AgentID:   s.agentID,
-		SessionID: s.sessionID,
-		CreatedAt: time.Now(),
-		TTL:       ttl,
+func (s *MapStore) Set(_ context.Context, key string, value any, ttl int64) error {
+	s.entries[key] = &storeRecord{
+		value:     value,
+		createdAt: time.Now(),
+		ttl:       ttl,
 	}
+	return nil
 }
 
-func (s *mapStore) del(key string) {
+func (s *MapStore) Delete(_ context.Context, key string) error {
 	delete(s.entries, key)
+	return nil
 }
 
-func (s *mapStore) list(prefix string) []Entry {
-	result := make([]Entry, 0, len(s.entries))
-
-	for k, e := range s.entries {
-		if e.IsExpired() {
+func (s *MapStore) List(_ context.Context, prefix string) ([]StoreEntry, error) {
+	result := make([]StoreEntry, 0, len(s.entries))
+	for k, r := range s.entries {
+		if r.isExpired() {
 			delete(s.entries, k)
 			continue
 		}
-
 		if strings.HasPrefix(k, prefix) {
-			result = append(result, *e)
+			result = append(result, StoreEntry{
+				Key:       k,
+				Value:     r.value,
+				CreatedAt: r.createdAt,
+				TTL:       r.ttl,
+			})
 		}
 	}
-
-	return result
+	return result, nil
 }
 
-func (s *mapStore) clear() {
-	s.entries = make(map[string]*Entry)
+func (s *MapStore) Clear(_ context.Context) error {
+	s.entries = make(map[string]*storeRecord)
+	return nil
 }
 
-func (s *mapStore) batchGet(keys []string) map[string]any {
+func (s *MapStore) BatchGet(ctx context.Context, keys []string) (map[string]any, error) {
 	result := make(map[string]any, len(keys))
-
 	for _, key := range keys {
-		if v, ok := s.get(key); ok {
+		if v, ok, _ := s.Get(ctx, key); ok {
 			result[key] = v
 		}
 	}
-
-	return result
+	return result, nil
 }
 
-func (s *mapStore) batchSet(entries map[string]any, ttl int64) {
+func (s *MapStore) BatchSet(_ context.Context, entries map[string]any, ttl int64) error {
 	now := time.Now()
-
 	for key, value := range entries {
-		s.entries[key] = &Entry{
-			Key:       key,
-			Value:     value,
-			Scope:     s.scope,
-			AgentID:   s.agentID,
-			SessionID: s.sessionID,
-			CreatedAt: now,
-			TTL:       ttl,
+		s.entries[key] = &storeRecord{
+			value:     value,
+			createdAt: now,
+			ttl:       ttl,
 		}
+	}
+	return nil
+}
+
+// SetCreatedAtForTest backdates the CreatedAt of the given key. Intended for
+// testing TTL expiry without real sleeps.
+func (s *MapStore) SetCreatedAtForTest(key string, t time.Time) {
+	if r, ok := s.entries[key]; ok {
+		r.createdAt = t
 	}
 }
