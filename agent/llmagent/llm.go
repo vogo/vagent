@@ -29,6 +29,7 @@ import (
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/agent"
+	"github.com/vogo/vagent/guard"
 	"github.com/vogo/vagent/hook"
 	"github.com/vogo/vagent/memory"
 	"github.com/vogo/vagent/prompt"
@@ -52,6 +53,8 @@ type Agent struct {
 	streamBufferSize int
 	middlewares      []agent.StreamMiddleware
 	hookManager      *hook.Manager
+	inputGuards      []guard.Guard
+	outputGuards     []guard.Guard
 }
 
 var (
@@ -107,6 +110,16 @@ func WithMemory(m *memory.Manager) Option {
 // WithHookManager sets the hook manager for event dispatch.
 func WithHookManager(m *hook.Manager) Option {
 	return func(a *Agent) { a.hookManager = m }
+}
+
+// WithInputGuards sets guards to check user input before agent processing.
+func WithInputGuards(guards ...guard.Guard) Option {
+	return func(a *Agent) { a.inputGuards = guards }
+}
+
+// WithOutputGuards sets guards to check agent output before returning to the user.
+func WithOutputGuards(guards ...guard.Guard) Option {
+	return func(a *Agent) { a.outputGuards = guards }
 }
 
 // New creates a new Agent with the given config and options.
@@ -293,10 +306,92 @@ func (a *Agent) dispatch(ctx context.Context, event schema.Event) {
 	a.hookManager.Dispatch(ctx, event)
 }
 
+// runInputGuards checks user input through input guards.
+// Returns the (possibly rewritten) text content, or a BlockedError.
+func (a *Agent) runInputGuards(ctx context.Context, req *schema.RunRequest) error {
+	if len(a.inputGuards) == 0 || len(req.Messages) == 0 {
+		return nil
+	}
+
+	// Find the last user message.
+	idx := -1
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if req.Messages[i].Role == aimodel.RoleUser {
+			idx = i
+			break
+		}
+	}
+
+	if idx < 0 {
+		return nil
+	}
+
+	msg := &guard.Message{
+		Direction: guard.DirectionInput,
+		Content:   req.Messages[idx].Content.Text(),
+		AgentID:   a.ID(),
+		SessionID: req.SessionID,
+		Metadata:  req.Metadata,
+	}
+
+	result, err := guard.RunGuards(ctx, msg, a.inputGuards...)
+	if err != nil {
+		return err
+	}
+
+	if result.Action == guard.ActionBlock {
+		return &guard.BlockedError{Result: result}
+	}
+
+	if result.Action == guard.ActionRewrite {
+		req.Messages[idx].Content = aimodel.NewTextContent(msg.Content)
+	}
+
+	return nil
+}
+
+// runOutputGuards checks agent output through output guards.
+// Returns the (possibly rewritten) text, or a BlockedError.
+func (a *Agent) runOutputGuards(ctx context.Context, sessionID string, respMsgs []schema.Message) ([]schema.Message, error) {
+	if len(a.outputGuards) == 0 || len(respMsgs) == 0 {
+		return respMsgs, nil
+	}
+
+	text := respMsgs[0].Content.Text()
+
+	msg := &guard.Message{
+		Direction: guard.DirectionOutput,
+		Content:   text,
+		AgentID:   a.ID(),
+		SessionID: sessionID,
+		Metadata:  nil,
+	}
+
+	result, err := guard.RunGuards(ctx, msg, a.outputGuards...)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Action == guard.ActionBlock {
+		return nil, &guard.BlockedError{Result: result}
+	}
+
+	if result.Action == guard.ActionRewrite {
+		respMsgs[0].Content = aimodel.NewTextContent(msg.Content)
+	}
+
+	return respMsgs, nil
+}
+
 // Run executes the ReAct loop: prompt -> LLM -> tool calls (loop) -> response.
 func (a *Agent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
 	if a.chatCompleter == nil {
 		return nil, errors.New("vagent: ChatCompleter is required")
+	}
+
+	// Run input guards before processing.
+	if err := a.runInputGuards(ctx, req); err != nil {
+		return nil, err
 	}
 
 	start := time.Now()
@@ -345,6 +440,13 @@ func (a *Agent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunRes
 
 		if choice.FinishReason != aimodel.FinishReasonToolCalls || len(assistantMsg.ToolCalls) == 0 {
 			respMsgs := []schema.Message{schema.NewAssistantMessage(assistantMsg, agentID)}
+
+			// Run output guards before returning response.
+			respMsgs, err = a.runOutputGuards(ctx, sessionID, respMsgs)
+			if err != nil {
+				return nil, err
+			}
+
 			runResp := &schema.RunResponse{
 				Messages:  respMsgs,
 				SessionID: sessionID,
@@ -453,6 +555,11 @@ func (a *Agent) RunStream(ctx context.Context, req *schema.RunRequest) (*schema.
 		return nil, errors.New("vagent: ChatCompleter is required")
 	}
 
+	// Run input guards before processing.
+	if err := a.runInputGuards(ctx, req); err != nil {
+		return nil, err
+	}
+
 	p := a.resolveRunParams(req.Options)
 
 	br, err := a.buildInitialMessages(ctx, req.Messages)
@@ -551,11 +658,24 @@ func (a *Agent) runStreamLoop(
 		if finishReason != aimodel.FinishReasonToolCalls || len(accumulated.ToolCalls) == 0 {
 			// Store messages in memory (same as Run path).
 			assistantMsg := schema.NewAssistantMessage(accumulated, agentID)
-			a.storeAndPromoteMessages(ctx, sessionID, req.Messages, []schema.Message{assistantMsg}, br.sessionMsgCount)
+			respMsgs := []schema.Message{assistantMsg}
+
+			// Run output guards before returning response.
+			respMsgs, err = a.runOutputGuards(ctx, sessionID, respMsgs)
+			if err != nil {
+				return err
+			}
+
+			a.storeAndPromoteMessages(ctx, sessionID, req.Messages, respMsgs, br.sessionMsgCount)
+
+			finalText := ""
+			if len(respMsgs) > 0 {
+				finalText = respMsgs[0].Content.Text()
+			}
 
 			return send(schema.NewEvent(schema.EventAgentEnd, agentID, sessionID, schema.AgentEndData{
 				Duration: time.Since(start).Milliseconds(),
-				Message:  accumulated.Content.Text(),
+				Message:  finalText,
 			}))
 		}
 
