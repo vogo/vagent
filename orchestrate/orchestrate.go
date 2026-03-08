@@ -20,6 +20,7 @@ package orchestrate
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/schema"
@@ -36,6 +37,7 @@ type ErrorStrategy int
 const (
 	Abort ErrorStrategy = iota
 	Skip
+	Compensate
 )
 
 // InputMapFunc maps upstream results to the current node's input.
@@ -43,12 +45,16 @@ type InputMapFunc func(upstreamResults map[string]*schema.RunResponse) (*schema.
 
 // Node is a single node in a DAG execution graph.
 type Node struct {
-	ID          string
-	Runner      Runner
-	Deps        []string
-	InputMapper InputMapFunc
-	Optional    bool
-	Condition   func(upstreamResults map[string]*schema.RunResponse) bool
+	ID           string
+	Runner       Runner
+	Deps         []string
+	InputMapper  InputMapFunc
+	Optional     bool
+	Condition    func(upstreamResults map[string]*schema.RunResponse) bool
+	Timeout      time.Duration // Per-node execution timeout (0 = no limit).
+	Retries      int           // Max retry count on failure (0 = no retry).
+	ResourceTags []string      // Resource tags for concurrency/rate control.
+	Priority     int           // Scheduling priority (higher = more priority).
 }
 
 // LoopNode defines a loop with a body runner and termination conditions.
@@ -59,12 +65,108 @@ type LoopNode struct {
 	ConvergenceFunc func(prev, curr *schema.RunResponse) bool
 }
 
+// DAGEventHandler receives lifecycle events during DAG execution.
+// All methods must be safe for concurrent use.
+type DAGEventHandler interface {
+	OnNodeStart(nodeID string)
+	OnNodeComplete(nodeID string, status NodeStatus, err error)
+	OnCheckpointError(nodeID string, err error)
+}
+
 // DAGConfig holds configuration for DAG execution.
 type DAGConfig struct {
-	MaxConcurrency int
-	ErrorStrategy  ErrorStrategy
-	EarlyExitFunc  func(nodeID string, resp *schema.RunResponse) bool
-	Aggregator     Aggregator
+	MaxConcurrency     int
+	ErrorStrategy      ErrorStrategy
+	EarlyExitFunc      func(nodeID string, resp *schema.RunResponse) bool
+	Aggregator         Aggregator
+	CheckpointStore    CheckpointStore        // Optional checkpoint store for save/resume.
+	ReplayMode         bool                   // When true, replay from checkpoint without executing runners.
+	PriorityScheduling bool                   // Use priority queue for ready nodes (default: FIFO).
+	CriticalPathAuto   bool                   // Auto-compute critical path priorities (requires PriorityScheduling).
+	BackpressureCfg    *BackpressureConfig    // Adaptive concurrency control (nil = disabled).
+	ResourceLimits     map[string]int         // Per-resource-tag concurrency limits.
+	ResourceRateLimits map[string]float64     // Per-resource-tag rate limits (requests/second).
+	CompensateCfg      *CompensateConfig      // Compensation configuration (nil = disabled).
+	EventHandler       DAGEventHandler        // Optional event handler for observability (nil = disabled).
+}
+
+// DAGOption is a functional option for configuring DAG execution.
+type DAGOption func(*DAGConfig)
+
+// WithMaxConcurrency sets the maximum number of concurrently running nodes.
+func WithMaxConcurrency(n int) DAGOption {
+	return func(c *DAGConfig) { c.MaxConcurrency = n }
+}
+
+// WithErrorStrategy sets the error handling strategy.
+func WithErrorStrategy(s ErrorStrategy) DAGOption {
+	return func(c *DAGConfig) { c.ErrorStrategy = s }
+}
+
+// WithEarlyExit sets a function that can trigger early DAG termination.
+func WithEarlyExit(fn func(nodeID string, resp *schema.RunResponse) bool) DAGOption {
+	return func(c *DAGConfig) { c.EarlyExitFunc = fn }
+}
+
+// WithAggregator sets the aggregator for combining terminal node results.
+func WithAggregator(a Aggregator) DAGOption {
+	return func(c *DAGConfig) { c.Aggregator = a }
+}
+
+// WithCheckpointStore enables checkpoint-based save/resume.
+func WithCheckpointStore(cs CheckpointStore) DAGOption {
+	return func(c *DAGConfig) { c.CheckpointStore = cs }
+}
+
+// WithReplayMode enables replaying from checkpoints without re-executing runners.
+func WithReplayMode() DAGOption {
+	return func(c *DAGConfig) { c.ReplayMode = true }
+}
+
+// WithPriorityScheduling enables priority-based scheduling with optional critical path auto-computation.
+func WithPriorityScheduling(criticalPathAuto bool) DAGOption {
+	return func(c *DAGConfig) {
+		c.PriorityScheduling = true
+		c.CriticalPathAuto = criticalPathAuto
+	}
+}
+
+// WithBackpressure enables adaptive concurrency control.
+func WithBackpressure(cfg *BackpressureConfig) DAGOption {
+	return func(c *DAGConfig) { c.BackpressureCfg = cfg }
+}
+
+// WithResourceLimits sets per-resource-tag concurrency limits.
+func WithResourceLimits(limits map[string]int) DAGOption {
+	return func(c *DAGConfig) { c.ResourceLimits = limits }
+}
+
+// WithResourceRateLimits sets per-resource-tag rate limits (requests/second).
+func WithResourceRateLimits(limits map[string]float64) DAGOption {
+	return func(c *DAGConfig) { c.ResourceRateLimits = limits }
+}
+
+// WithCompensation enables compensation (Saga pattern) on failure.
+func WithCompensation(cfg *CompensateConfig) DAGOption {
+	return func(c *DAGConfig) {
+		c.ErrorStrategy = Compensate
+		c.CompensateCfg = cfg
+	}
+}
+
+// WithEventHandler sets the event handler for observability.
+func WithEventHandler(h DAGEventHandler) DAGOption {
+	return func(c *DAGConfig) { c.EventHandler = h }
+}
+
+// RunDAG is a convenience entry point that builds a DAGConfig from functional options
+// and delegates to ExecuteDAG. For advanced use cases, use ExecuteDAG directly.
+func RunDAG(ctx context.Context, nodes []Node, req *schema.RunRequest, opts ...DAGOption) (*DAGResult, error) {
+	var cfg DAGConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return ExecuteDAG(ctx, cfg, nodes, req)
 }
 
 // NodeStatus represents the execution status of a node.
@@ -76,6 +178,7 @@ const (
 	NodeDone
 	NodeFailed
 	NodeSkipped
+	NodeCompensated
 )
 
 // DAGResult holds the results of a DAG execution.
@@ -84,6 +187,7 @@ type DAGResult struct {
 	NodeStatus  map[string]NodeStatus
 	FinalOutput *schema.RunResponse
 	Usage       *aimodel.Usage
+	Timeline    []NodeTimeline // Node execution timeline (Gantt chart data).
 }
 
 // Edge represents a dependency edge from one node to another.
