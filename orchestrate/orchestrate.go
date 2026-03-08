@@ -19,6 +19,7 @@ package orchestrate
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/schema"
@@ -83,4 +84,128 @@ type DAGResult struct {
 	NodeStatus  map[string]NodeStatus
 	FinalOutput *schema.RunResponse
 	Usage       *aimodel.Usage
+}
+
+// Edge represents a dependency edge from one node to another.
+type Edge struct {
+	From string
+	To   string
+}
+
+// BuildDAG converts a list of nodes and edges into nodes with Deps populated.
+// It validates that all edge references exist and that no node has pre-existing Deps
+// (to avoid mixing the two definition styles).
+func BuildDAG(nodes []Node, edges []Edge) ([]Node, error) {
+	nodeIndex := make(map[string]int, len(nodes))
+	for i, n := range nodes {
+		if _, exists := nodeIndex[n.ID]; exists {
+			return nil, fmt.Errorf("orchestrate: duplicate node ID %q", n.ID)
+		}
+		if len(n.Deps) > 0 {
+			return nil, fmt.Errorf("orchestrate: node %q has Deps set; cannot mix Deps and Edge styles", n.ID)
+		}
+		nodeIndex[n.ID] = i
+	}
+
+	// Build deps from edges.
+	depsMap := make(map[string][]string, len(nodes))
+	for _, e := range edges {
+		if _, ok := nodeIndex[e.From]; !ok {
+			return nil, fmt.Errorf("orchestrate: edge references unknown node %q (From)", e.From)
+		}
+		if _, ok := nodeIndex[e.To]; !ok {
+			return nil, fmt.Errorf("orchestrate: edge references unknown node %q (To)", e.To)
+		}
+		depsMap[e.To] = append(depsMap[e.To], e.From)
+	}
+
+	// Copy nodes with Deps filled in.
+	result := make([]Node, len(nodes))
+	copy(result, nodes)
+	for i := range result {
+		if deps, ok := depsMap[result[i].ID]; ok {
+			result[i].Deps = deps
+		}
+	}
+
+	if err := ValidateDAG(result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// ValidateDAG performs comprehensive validation on DAG nodes:
+// duplicate IDs, missing dependencies, cycle detection, and connectivity check.
+// Multiple root nodes (no deps) and multiple terminal nodes are allowed,
+// but all nodes must be part of a single connected graph.
+func ValidateDAG(nodes []Node) error {
+	seen := make(map[string]bool, len(nodes))
+	for _, n := range nodes {
+		if seen[n.ID] {
+			return fmt.Errorf("orchestrate: duplicate node ID %q", n.ID)
+		}
+		seen[n.ID] = true
+	}
+
+	for _, n := range nodes {
+		for _, dep := range n.Deps {
+			if !seen[dep] {
+				return fmt.Errorf("orchestrate: node %q depends on unknown node %q", n.ID, dep)
+			}
+		}
+	}
+
+	if err := detectCycle(nodes); err != nil {
+		return err
+	}
+
+	if err := checkConnected(nodes); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// checkConnected verifies that all nodes form a single connected component
+// when edges are treated as undirected. Returns an error if the graph is disconnected.
+func checkConnected(nodes []Node) error {
+	if len(nodes) <= 1 {
+		return nil
+	}
+
+	// Build undirected adjacency list.
+	adj := make(map[string][]string, len(nodes))
+	for _, n := range nodes {
+		for _, dep := range n.Deps {
+			adj[n.ID] = append(adj[n.ID], dep)
+			adj[dep] = append(adj[dep], n.ID)
+		}
+	}
+
+	// BFS from the first node.
+	visited := make(map[string]bool, len(nodes))
+	queue := []string{nodes[0].ID}
+	visited[nodes[0].ID] = true
+
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, neighbor := range adj[cur] {
+			if !visited[neighbor] {
+				visited[neighbor] = true
+				queue = append(queue, neighbor)
+			}
+		}
+	}
+
+	if len(visited) != len(nodes) {
+		for _, n := range nodes {
+			if !visited[n.ID] {
+				return fmt.Errorf("orchestrate: node %q is disconnected from the rest of the graph", n.ID)
+			}
+		}
+	}
+
+	return nil
 }

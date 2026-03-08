@@ -758,7 +758,10 @@ func TestIntegration_DAG_DiamondPipeline(t *testing.T) {
 		{ID: "c", Runner: stepC, Deps: []string{"a"}},
 		{ID: "d", Runner: stepD, Deps: []string{"b", "c"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-diamond"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-diamond"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages:  []schema.Message{schema.NewUserMessage("input data")},
@@ -806,7 +809,10 @@ func TestIntegration_DAG_LinearChain(t *testing.T) {
 		{ID: "b", Runner: newTextStep("b", "-B"), Deps: []string{"a"}},
 		{ID: "c", Runner: newTextStep("c", "-C"), Deps: []string{"b"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-linear"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-linear"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
@@ -839,7 +845,10 @@ func TestIntegration_DAG_FanOutFanIn(t *testing.T) {
 			}, nil
 		}), Deps: []string{"b", "c", "d"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-fanout"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-fanout"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
@@ -856,7 +865,10 @@ func TestIntegration_DAG_FanOutFanIn(t *testing.T) {
 
 // TestIntegration_DAG_EmptyNodes verifies that a DAG with no nodes returns input messages.
 func TestIntegration_DAG_EmptyNodes(t *testing.T) {
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-empty"}, orchestrate.DAGConfig{}, nil)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-empty"}, orchestrate.DAGConfig{}, nil)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages:  []schema.Message{schema.NewUserMessage("hello")},
 		SessionID: "empty-dag-sess",
@@ -880,9 +892,12 @@ func TestIntegration_DAG_AbortOnFailure(t *testing.T) {
 		{ID: "b", Runner: newFailStep("b", errors.New("node-b-failed")), Deps: []string{"a"}},
 		{ID: "c", Runner: newTextStep("c", "-C"), Deps: []string{"b"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-abort"}, orchestrate.DAGConfig{ErrorStrategy: orchestrate.Abort}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-abort"}, orchestrate.DAGConfig{ErrorStrategy: orchestrate.Abort}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
-	_, err := wf.Run(context.Background(), &schema.RunRequest{
+	_, err = wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
 	})
 	if err == nil {
@@ -901,7 +916,10 @@ func TestIntegration_DAG_SkipOptionalNode(t *testing.T) {
 		{ID: "b", Runner: newFailStep("b", errors.New("optional-fail")), Deps: []string{"a"}, Optional: true},
 		{ID: "c", Runner: newTextStep("c", "-C"), Deps: []string{"a"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-skip"}, orchestrate.DAGConfig{ErrorStrategy: orchestrate.Skip}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-skip"}, orchestrate.DAGConfig{ErrorStrategy: orchestrate.Skip}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
@@ -932,7 +950,10 @@ func TestIntegration_DAG_ConditionalNode(t *testing.T) {
 		},
 		{ID: "c", Runner: newTextStep("c", "-C"), Deps: []string{"a"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-cond"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-cond"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("no-trigger")},
@@ -968,7 +989,10 @@ func TestIntegration_DAG_InputMapper(t *testing.T) {
 			},
 		},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-mapper"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-mapper"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
@@ -992,9 +1016,12 @@ func TestIntegration_DAG_ContextCancellation(t *testing.T) {
 		})},
 		{ID: "b", Runner: newTextStep("b", "-B"), Deps: []string{"a"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-cancel"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-cancel"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
-	_, err := wf.Run(ctx, &schema.RunRequest{
+	_, err = wf.Run(ctx, &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
 	})
 	if err == nil {
@@ -1009,13 +1036,17 @@ func TestIntegration_DAG_ContextCancellation(t *testing.T) {
 // picks the last terminal node by sorted ID.
 func TestIntegration_DAG_LastResultAggregator(t *testing.T) {
 	nodes := []orchestrate.Node{
-		{ID: "a", Runner: newTextStep("a", "-A")},
-		{ID: "b", Runner: newTextStep("b", "-B")},
-		{ID: "z", Runner: newTextStep("z", "-Z")},
+		{ID: "root", Runner: newTextStep("root", "")},
+		{ID: "a", Runner: newTextStep("a", "-A"), Deps: []string{"root"}},
+		{ID: "b", Runner: newTextStep("b", "-B"), Deps: []string{"root"}},
+		{ID: "z", Runner: newTextStep("z", "-Z"), Deps: []string{"root"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-last"}, orchestrate.DAGConfig{
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-last"}, orchestrate.DAGConfig{
 		Aggregator: orchestrate.LastResultAggregator(),
 	}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
@@ -1041,11 +1072,14 @@ func TestIntegration_DAG_EarlyExit(t *testing.T) {
 			return &schema.RunResponse{Messages: req.Messages}, nil
 		}), Deps: []string{"a"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-early"}, orchestrate.DAGConfig{
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-early"}, orchestrate.DAGConfig{
 		EarlyExitFunc: func(nodeID string, _ *schema.RunResponse) bool {
 			return nodeID == "a"
 		},
 	}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
@@ -1083,10 +1117,18 @@ func TestIntegration_DAG_MaxConcurrency(t *testing.T) {
 		}
 	}
 
-	nodes := []orchestrate.Node{makeNode("a"), makeNode("b"), makeNode("c"), makeNode("d")}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-conc"}, orchestrate.DAGConfig{MaxConcurrency: 2}, nodes)
+	rootNode := orchestrate.Node{ID: "root", Runner: newTextStep("root", "")}
+	nodes := []orchestrate.Node{rootNode, makeNode("a"), makeNode("b"), makeNode("c"), makeNode("d")}
+	nodes[1].Deps = []string{"root"}
+	nodes[2].Deps = []string{"root"}
+	nodes[3].Deps = []string{"root"}
+	nodes[4].Deps = []string{"root"}
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-conc"}, orchestrate.DAGConfig{MaxConcurrency: 2}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
-	_, err := wf.Run(context.Background(), &schema.RunRequest{
+	_, err = wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
 	})
 	if err != nil {
@@ -1104,11 +1146,7 @@ func TestIntegration_DAG_CycleError(t *testing.T) {
 		{ID: "b", Runner: newTextStep("b", ""), Deps: []string{"a"}},
 		{ID: "c", Runner: newTextStep("c", ""), Deps: []string{"b"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-cycle"}, orchestrate.DAGConfig{}, nodes)
-
-	_, err := wf.Run(context.Background(), &schema.RunRequest{
-		Messages: []schema.Message{schema.NewUserMessage("start")},
-	})
+	_, err := workflowagent.NewDAG(agent.Config{ID: "dag-cycle"}, orchestrate.DAGConfig{}, nodes)
 	if err == nil {
 		t.Fatal("expected cycle error")
 	}
@@ -1123,11 +1161,7 @@ func TestIntegration_DAG_DuplicateNodeID(t *testing.T) {
 		{ID: "a", Runner: newTextStep("a", "")},
 		{ID: "a", Runner: newTextStep("a", "")},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-dup"}, orchestrate.DAGConfig{}, nodes)
-
-	_, err := wf.Run(context.Background(), &schema.RunRequest{
-		Messages: []schema.Message{schema.NewUserMessage("start")},
-	})
+	_, err := workflowagent.NewDAG(agent.Config{ID: "dag-dup"}, orchestrate.DAGConfig{}, nodes)
 	if err == nil {
 		t.Fatal("expected duplicate ID error")
 	}
@@ -1143,7 +1177,10 @@ func TestIntegration_DAG_Stream(t *testing.T) {
 		{ID: "a", Runner: newTextStep("a", "-A")},
 		{ID: "b", Runner: newTextStep("b", "-B"), Deps: []string{"a"}},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-stream"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-stream"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	stream, err := wf.RunStream(context.Background(), &schema.RunRequest{
 		Messages:  []schema.Message{schema.NewUserMessage("hello")},
@@ -1195,9 +1232,12 @@ func TestIntegration_DAG_NilResponseError(t *testing.T) {
 	nodes := []orchestrate.Node{
 		{ID: "a", Runner: newNilRespStep("a")},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-nil"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-nil"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
-	_, err := wf.Run(context.Background(), &schema.RunRequest{
+	_, err = wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("test")},
 	})
 	if err == nil {
@@ -1521,7 +1561,10 @@ func TestIntegration_NestedDAGInSequential(t *testing.T) {
 		{ID: "a", Runner: newTextStep("a", "-A")},
 		{ID: "b", Runner: newTextStep("b", "-B"), Deps: []string{"a"}},
 	}
-	dagWf := workflowagent.NewDAG(agent.Config{ID: "inner-dag"}, orchestrate.DAGConfig{}, nodes)
+	dagWf, err := workflowagent.NewDAG(agent.Config{ID: "inner-dag"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	outerWf := workflowagent.New(
 		agent.Config{ID: "outer-seq"},
@@ -1547,7 +1590,10 @@ func TestIntegration_DAG_RunText_Convenience(t *testing.T) {
 	nodes := []orchestrate.Node{
 		{ID: "a", Runner: newTextStep("a", "-processed")},
 	}
-	wf := workflowagent.NewDAG(agent.Config{ID: "dag-runtext"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := workflowagent.NewDAG(agent.Config{ID: "dag-runtext"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 
 	resp, err := agent.RunText(context.Background(), wf, "input")
 	if err != nil {

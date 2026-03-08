@@ -443,7 +443,10 @@ func TestAgent_RunDAG_Diamond(t *testing.T) {
 		{ID: "c", Runner: stepC, Deps: []string{"a"}},
 		{ID: "d", Runner: stepD, Deps: []string{"b", "c"}},
 	}
-	wf := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 	resp, err := wf.Run(context.Background(), &schema.RunRequest{
 		Messages:  []schema.Message{schema.NewUserMessage("start")},
 		SessionID: "dag-session",
@@ -467,8 +470,11 @@ func TestAgent_RunDAG_Error(t *testing.T) {
 	nodes := []orchestrate.Node{
 		{ID: "a", Runner: stepA},
 	}
-	wf := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
-	_, err := wf.Run(context.Background(), &schema.RunRequest{
+	wf, err := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
+	_, err = wf.Run(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("start")},
 	})
 	if err == nil {
@@ -537,7 +543,10 @@ func TestAgent_RunDAG_Stream(t *testing.T) {
 	nodes := []orchestrate.Node{
 		{ID: "a", Runner: stepA},
 	}
-	wf := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
+	wf, err := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
+	if err != nil {
+		t.Fatalf("NewDAG error: %v", err)
+	}
 	stream, err := wf.RunStream(context.Background(), &schema.RunRequest{
 		Messages: []schema.Message{schema.NewUserMessage("hello")},
 	})

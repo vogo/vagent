@@ -61,13 +61,32 @@ func New(cfg agent.Config, steps ...agent.Agent) *Agent {
 }
 
 // NewDAG creates a DAG workflow with explicit node dependencies.
-func NewDAG(cfg agent.Config, dagCfg orchestrate.DAGConfig, nodes []orchestrate.Node) *Agent {
+// It validates the DAG structure at construction time and returns an error
+// if the nodes contain duplicate IDs, missing dependencies, cycles, or disconnected subgraphs.
+func NewDAG(cfg agent.Config, dagCfg orchestrate.DAGConfig, nodes []orchestrate.Node) (*Agent, error) {
+	if err := orchestrate.ValidateDAG(nodes); err != nil {
+		return nil, err
+	}
 	return &Agent{
 		Base:     agent.NewBase(cfg),
 		mode:     modeDAG,
 		dagCfg:   dagCfg,
 		dagNodes: nodes,
+	}, nil
+}
+
+// NewDAGWithEdges creates a DAG workflow using separate node and edge definitions.
+func NewDAGWithEdges(cfg agent.Config, dagCfg orchestrate.DAGConfig, nodes []orchestrate.Node, edges []orchestrate.Edge) (*Agent, error) {
+	dagNodes, err := orchestrate.BuildDAG(nodes, edges)
+	if err != nil {
+		return nil, err
 	}
+	return &Agent{
+		Base:     agent.NewBase(cfg),
+		mode:     modeDAG,
+		dagCfg:   dagCfg,
+		dagNodes: dagNodes,
+	}, nil
 }
 
 // NewLoop creates a loop workflow.
@@ -101,7 +120,7 @@ func (a *Agent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunRes
 	case modeLoop:
 		resp, err = a.runLoop(ctx, req)
 	default:
-		return nil, fmt.Errorf("vagent: unknown workflow mode %d", a.mode)
+		return nil, fmt.Errorf("workflowagent: unknown workflow mode %d", a.mode)
 	}
 
 	if err != nil {
@@ -132,11 +151,11 @@ func (a *Agent) runSequence(ctx context.Context, req *schema.RunRequest) (*schem
 
 		resp, err := step.Run(ctx, currentReq)
 		if err != nil {
-			return nil, fmt.Errorf("vagent: workflow step %d (%s): %w", i+1, step.ID(), err)
+			return nil, fmt.Errorf("workflowagent: workflow step %d (%s): %w", i+1, step.ID(), err)
 		}
 
 		if resp == nil {
-			return nil, fmt.Errorf("vagent: workflow step %d (%s): nil response", i+1, step.ID())
+			return nil, fmt.Errorf("workflowagent: workflow step %d (%s): nil response", i+1, step.ID())
 		}
 
 		if resp.Usage != nil {

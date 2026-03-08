@@ -36,25 +36,13 @@ func ExecuteDAG(ctx context.Context, cfg DAGConfig, nodes []Node, req *schema.Ru
 		}, nil
 	}
 
+	if err := ValidateDAG(nodes); err != nil {
+		return nil, err
+	}
+
 	nodeMap := make(map[string]*Node, len(nodes))
 	for i := range nodes {
-		n := &nodes[i]
-		if _, exists := nodeMap[n.ID]; exists {
-			return nil, fmt.Errorf("orchestrate: duplicate node ID %q", n.ID)
-		}
-		nodeMap[n.ID] = n
-	}
-
-	for _, n := range nodes {
-		for _, dep := range n.Deps {
-			if _, ok := nodeMap[dep]; !ok {
-				return nil, fmt.Errorf("orchestrate: node %q depends on unknown node %q", n.ID, dep)
-			}
-		}
-	}
-
-	if err := detectCycle(nodes); err != nil {
-		return nil, err
+		nodeMap[nodes[i].ID] = &nodes[i]
 	}
 
 	downstream := make(map[string][]string)

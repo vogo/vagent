@@ -89,6 +89,167 @@ func makeReq(text string) *schema.RunRequest {
 	}
 }
 
+// =============================================================================
+// BuildDAG tests
+// =============================================================================
+
+func TestBuildDAG_Basic(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "B", Runner: passthroughRunner()},
+		{ID: "C", Runner: passthroughRunner()},
+		{ID: "D", Runner: passthroughRunner()},
+	}
+	edges := []Edge{
+		{From: "A", To: "B"},
+		{From: "A", To: "C"},
+		{From: "B", To: "D"},
+		{From: "C", To: "D"},
+	}
+	result, err := BuildDAG(nodes, edges)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 4 {
+		t.Fatalf("expected 4 nodes, got %d", len(result))
+	}
+	// A has no deps
+	if len(result[0].Deps) != 0 {
+		t.Errorf("A should have no deps, got %v", result[0].Deps)
+	}
+	// B depends on A
+	if len(result[1].Deps) != 1 || result[1].Deps[0] != "A" {
+		t.Errorf("B deps = %v, want [A]", result[1].Deps)
+	}
+	// C depends on A
+	if len(result[2].Deps) != 1 || result[2].Deps[0] != "A" {
+		t.Errorf("C deps = %v, want [A]", result[2].Deps)
+	}
+	// D depends on B and C
+	if len(result[3].Deps) != 2 {
+		t.Errorf("D deps = %v, want [B, C]", result[3].Deps)
+	}
+}
+
+func TestBuildDAG_UnknownFromNode(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+	}
+	edges := []Edge{
+		{From: "Z", To: "A"},
+	}
+	_, err := BuildDAG(nodes, edges)
+	if err == nil {
+		t.Fatal("expected error for unknown From node")
+	}
+	if !strings.Contains(err.Error(), "unknown node") || !strings.Contains(err.Error(), "From") {
+		t.Errorf("error should mention unknown node (From): %v", err)
+	}
+}
+
+func TestBuildDAG_UnknownToNode(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+	}
+	edges := []Edge{
+		{From: "A", To: "Z"},
+	}
+	_, err := BuildDAG(nodes, edges)
+	if err == nil {
+		t.Fatal("expected error for unknown To node")
+	}
+	if !strings.Contains(err.Error(), "unknown node") || !strings.Contains(err.Error(), "To") {
+		t.Errorf("error should mention unknown node (To): %v", err)
+	}
+}
+
+func TestBuildDAG_DepsMixError(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "B", Runner: passthroughRunner(), Deps: []string{"A"}},
+	}
+	edges := []Edge{
+		{From: "A", To: "B"},
+	}
+	_, err := BuildDAG(nodes, edges)
+	if err == nil {
+		t.Fatal("expected error for mixing Deps and edges")
+	}
+	if !strings.Contains(err.Error(), "Deps set") {
+		t.Errorf("error should mention Deps set: %v", err)
+	}
+}
+
+func TestBuildDAG_DuplicateNodeID(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "A", Runner: passthroughRunner()},
+	}
+	_, err := BuildDAG(nodes, nil)
+	if err == nil {
+		t.Fatal("expected error for duplicate node ID")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("error should mention duplicate: %v", err)
+	}
+}
+
+func TestBuildDAG_NoEdgesSingleNode(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+	}
+	result, err := BuildDAG(nodes, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || len(result[0].Deps) != 0 {
+		t.Errorf("single node should have no deps")
+	}
+}
+
+func TestBuildDAG_NoEdgesDisconnected(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "B", Runner: passthroughRunner()},
+	}
+	_, err := BuildDAG(nodes, nil)
+	if err == nil {
+		t.Fatal("expected error for disconnected nodes")
+	}
+	if !strings.Contains(err.Error(), "disconnected") {
+		t.Errorf("error should mention disconnected: %v", err)
+	}
+}
+
+func TestBuildDAG_ExecuteIntegration(t *testing.T) {
+	// Build DAG with edges, then execute it.
+	nodes := []Node{
+		{ID: "A", Runner: appendRunner("-A")},
+		{ID: "B", Runner: appendRunner("-B")},
+		{ID: "C", Runner: appendRunner("-C")},
+	}
+	edges := []Edge{
+		{From: "A", To: "B"},
+		{From: "B", To: "C"},
+	}
+	dagNodes, err := BuildDAG(nodes, edges)
+	if err != nil {
+		t.Fatalf("BuildDAG error: %v", err)
+	}
+	result, err := ExecuteDAG(context.Background(), DAGConfig{}, dagNodes, makeReq("start"))
+	if err != nil {
+		t.Fatalf("ExecuteDAG error: %v", err)
+	}
+	got := result.FinalOutput.Messages[0].Content.Text()
+	if got != "start-A-B-C" {
+		t.Errorf("got %q, want %q", got, "start-A-B-C")
+	}
+}
+
+// =============================================================================
+// ExecuteDAG tests
+// =============================================================================
+
 func TestExecuteDAG_Linear(t *testing.T) {
 	// A -> B -> C
 	nodes := []Node{
@@ -231,12 +392,13 @@ func TestExecuteDAG_EmptyNodes(t *testing.T) {
 func TestExecuteDAG_AbortOnFailure(t *testing.T) {
 	var bCalled atomic.Bool
 	nodes := []Node{
-		{ID: "A", Runner: errorRunner(errors.New("fail"))},
+		{ID: "root", Runner: passthroughRunner()},
+		{ID: "A", Runner: errorRunner(errors.New("fail")), Deps: []string{"root"}},
 		{ID: "B", Runner: newMockRunner(func(_ context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
 			bCalled.Store(true)
 			time.Sleep(50 * time.Millisecond)
 			return &schema.RunResponse{Messages: req.Messages}, nil
-		})},
+		}), Deps: []string{"root"}},
 	}
 	_, err := ExecuteDAG(context.Background(), DAGConfig{ErrorStrategy: Abort}, nodes, makeReq("start"))
 	if err == nil {
@@ -288,10 +450,11 @@ func TestExecuteDAG_MaxConcurrency(t *testing.T) {
 	})
 
 	nodes := []Node{
-		{ID: "A", Runner: runner},
-		{ID: "B", Runner: runner},
-		{ID: "C", Runner: runner},
-		{ID: "D", Runner: runner},
+		{ID: "root", Runner: passthroughRunner()},
+		{ID: "A", Runner: runner, Deps: []string{"root"}},
+		{ID: "B", Runner: runner, Deps: []string{"root"}},
+		{ID: "C", Runner: runner, Deps: []string{"root"}},
+		{ID: "D", Runner: runner, Deps: []string{"root"}},
 	}
 	_, err := ExecuteDAG(context.Background(), DAGConfig{MaxConcurrency: 2}, nodes, makeReq("start"))
 	if err != nil {
@@ -371,8 +534,9 @@ func TestExecuteDAG_DefaultMultiDepMerge(t *testing.T) {
 
 func TestExecuteDAG_Aggregation(t *testing.T) {
 	nodes := []Node{
-		{ID: "A", Runner: appendRunner("-A")},
-		{ID: "B", Runner: appendRunner("-B")},
+		{ID: "root", Runner: passthroughRunner()},
+		{ID: "A", Runner: appendRunner("-A"), Deps: []string{"root"}},
+		{ID: "B", Runner: appendRunner("-B"), Deps: []string{"root"}},
 	}
 	result, err := ExecuteDAG(context.Background(), DAGConfig{Aggregator: ConcatMessagesAggregator()}, nodes, makeReq("start"))
 	if err != nil {
@@ -433,7 +597,7 @@ func TestExecuteDAG_ConditionalNode(t *testing.T) {
 func TestExecuteDAG_UsageAccumulation(t *testing.T) {
 	nodes := []Node{
 		{ID: "A", Runner: usageRunner(10, 20, 30)},
-		{ID: "B", Runner: usageRunner(5, 15, 20)},
+		{ID: "B", Runner: usageRunner(5, 15, 20), Deps: []string{"A"}},
 	}
 	result, err := ExecuteDAG(context.Background(), DAGConfig{}, nodes, makeReq("start"))
 	if err != nil {
@@ -513,8 +677,9 @@ func TestExecuteDAG_ParallelExecution(t *testing.T) {
 	}
 
 	nodes := []Node{
-		{ID: "A", Runner: makeTracker("A", 50*time.Millisecond)},
-		{ID: "B", Runner: makeTracker("B", 50*time.Millisecond)},
+		{ID: "root", Runner: passthroughRunner()},
+		{ID: "A", Runner: makeTracker("A", 50*time.Millisecond), Deps: []string{"root"}},
+		{ID: "B", Runner: makeTracker("B", 50*time.Millisecond), Deps: []string{"root"}},
 	}
 	_, err := ExecuteDAG(context.Background(), DAGConfig{}, nodes, makeReq("start"))
 	if err != nil {
@@ -533,5 +698,128 @@ func TestExecuteDAG_ParallelExecution(t *testing.T) {
 	}
 	if startCount != 2 {
 		t.Errorf("expected both nodes to start before either ends, got order: %v", order)
+	}
+}
+
+// =============================================================================
+// ValidateDAG tests
+// =============================================================================
+
+func TestValidateDAG_SingleNode(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+	}
+	if err := ValidateDAG(nodes); err != nil {
+		t.Fatalf("single node should not error: %v", err)
+	}
+}
+
+func TestValidateDAG_ValidDAG(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "B", Runner: passthroughRunner(), Deps: []string{"A"}},
+		{ID: "C", Runner: passthroughRunner(), Deps: []string{"A"}},
+		{ID: "D", Runner: passthroughRunner(), Deps: []string{"B", "C"}},
+	}
+	if err := ValidateDAG(nodes); err != nil {
+		t.Fatalf("valid DAG should not error: %v", err)
+	}
+}
+
+func TestValidateDAG_DisconnectedNode(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "B", Runner: passthroughRunner(), Deps: []string{"A"}},
+		{ID: "C", Runner: passthroughRunner()}, // disconnected from A-B
+	}
+	err := ValidateDAG(nodes)
+	if err == nil {
+		t.Fatal("expected error for disconnected node")
+	}
+	if !strings.Contains(err.Error(), "disconnected") || !strings.Contains(err.Error(), "C") {
+		t.Errorf("error should mention disconnected node C: %v", err)
+	}
+}
+
+func TestValidateDAG_DuplicateID(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "A", Runner: passthroughRunner()},
+	}
+	err := ValidateDAG(nodes)
+	if err == nil {
+		t.Fatal("expected error for duplicate ID")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("error should mention duplicate: %v", err)
+	}
+}
+
+func TestValidateDAG_MissingDep(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner(), Deps: []string{"Z"}},
+	}
+	err := ValidateDAG(nodes)
+	if err == nil {
+		t.Fatal("expected error for missing dep")
+	}
+	if !strings.Contains(err.Error(), "unknown node") {
+		t.Errorf("error should mention unknown node: %v", err)
+	}
+}
+
+func TestValidateDAG_Cycle(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner(), Deps: []string{"B"}},
+		{ID: "B", Runner: passthroughRunner(), Deps: []string{"A"}},
+	}
+	err := ValidateDAG(nodes)
+	if err == nil {
+		t.Fatal("expected error for cycle")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("error should mention cycle: %v", err)
+	}
+}
+
+func TestValidateDAG_Empty(t *testing.T) {
+	if err := ValidateDAG(nil); err != nil {
+		t.Fatalf("empty nodes should not error: %v", err)
+	}
+}
+
+func TestBuildDAG_CycleDetection(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "B", Runner: passthroughRunner()},
+	}
+	edges := []Edge{
+		{From: "A", To: "B"},
+		{From: "B", To: "A"},
+	}
+	_, err := BuildDAG(nodes, edges)
+	if err == nil {
+		t.Fatal("expected cycle error from BuildDAG")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("error should mention cycle: %v", err)
+	}
+}
+
+func TestBuildDAG_DisconnectedNodeDetection(t *testing.T) {
+	nodes := []Node{
+		{ID: "A", Runner: passthroughRunner()},
+		{ID: "B", Runner: passthroughRunner()},
+		{ID: "C", Runner: passthroughRunner()},
+	}
+	edges := []Edge{
+		{From: "A", To: "B"},
+	}
+	_, err := BuildDAG(nodes, edges)
+	if err == nil {
+		t.Fatal("expected error for disconnected node C")
+	}
+	if !strings.Contains(err.Error(), "disconnected") {
+		t.Errorf("error should mention disconnected: %v", err)
 	}
 }
