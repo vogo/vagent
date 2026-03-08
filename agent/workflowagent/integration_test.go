@@ -200,7 +200,8 @@ func TestIntegration_DAG_ConditionalSkip(t *testing.T) {
 
 	nodes := []orchestrate.Node{
 		{ID: "A", Runner: stepA},
-		{ID: "B", Runner: stepB, Deps: []string{"A"},
+		{
+			ID: "B", Runner: stepB, Deps: []string{"A"},
 			Condition: func(upstream map[string]*schema.RunResponse) bool {
 				return strings.Contains(upstream["A"].Messages[0].Content.Text(), "yes")
 			},
@@ -232,7 +233,8 @@ func TestIntegration_DAG_ConditionalExecute(t *testing.T) {
 
 	nodes := []orchestrate.Node{
 		{ID: "A", Runner: stepA},
-		{ID: "B", Runner: stepB, Deps: []string{"A"},
+		{
+			ID: "B", Runner: stepB, Deps: []string{"A"},
 			Condition: func(upstream map[string]*schema.RunResponse) bool {
 				return strings.Contains(upstream["A"].Messages[0].Content.Text(), "yes")
 			},
@@ -318,7 +320,8 @@ func TestIntegration_DAG_InputMapper(t *testing.T) {
 	nodes := []orchestrate.Node{
 		{ID: "A", Runner: stepA},
 		{ID: "B", Runner: stepB},
-		{ID: "C", Runner: intMakePassthrough("c"), Deps: []string{"A", "B"},
+		{
+			ID: "C", Runner: intMakePassthrough("c"), Deps: []string{"A", "B"},
 			InputMapper: func(upstream map[string]*schema.RunResponse) (*schema.RunRequest, error) {
 				aText := upstream["A"].Messages[0].Content.Text()
 				bText := upstream["B"].Messages[0].Content.Text()

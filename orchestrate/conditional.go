@@ -35,10 +35,10 @@ type Branch struct {
 // ConditionalNode represents a node that routes execution to different branches
 // based on upstream results. Branches are evaluated in order; the first match wins.
 type ConditionalNode struct {
-	Node                     // Embedded base node (Runner executes first, then branches are evaluated).
-	Branches   []Branch     // Conditional branches, evaluated in order.
-	Default    string       // Default target node ID when no branch matches (empty = skip).
-	Exhaustive bool         // When true, validation requires Default to be non-empty.
+	Node                // Embedded base node (Runner executes first, then branches are evaluated).
+	Branches   []Branch // Conditional branches, evaluated in order.
+	Default    string   // Default target node ID when no branch matches (empty = skip).
+	Exhaustive bool     // When true, validation requires Default to be non-empty.
 }
 
 // ValidateConditionalNode validates a ConditionalNode's configuration.
@@ -72,8 +72,8 @@ func (cn *ConditionalNode) EvaluateBranches(upstreamResults map[string]*schema.R
 // then evaluates branches to determine which target nodes to run.
 // It returns the runner's response and the selected target node ID.
 func ExecuteConditional(ctx context.Context, cn *ConditionalNode, req *schema.RunRequest,
-	upstreamResults map[string]*schema.RunResponse) (*schema.RunResponse, string, error) {
-
+	upstreamResults map[string]*schema.RunResponse,
+) (*schema.RunResponse, string, error) {
 	if err := ValidateConditionalNode(cn); err != nil {
 		return nil, "", err
 	}

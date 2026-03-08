@@ -33,16 +33,29 @@ type entry struct {
 
 // Registry is a thread-safe in-memory tool registry.
 type Registry struct {
-	mu      sync.RWMutex
-	entries map[string]*entry
+	mu             sync.RWMutex
+	entries        map[string]*entry
+	externalCaller ExternalToolCaller
 }
 
 // Compile-time check: Registry implements ToolRegistry.
 var _ ToolRegistry = (*Registry)(nil)
 
+// RegistryOption configures a Registry during construction.
+type RegistryOption func(*Registry)
+
+// WithExternalCaller sets the caller used for tools with no local handler.
+func WithExternalCaller(c ExternalToolCaller) RegistryOption {
+	return func(r *Registry) { r.externalCaller = c }
+}
+
 // NewRegistry creates an empty Registry.
-func NewRegistry() *Registry {
-	return &Registry{entries: make(map[string]*entry)}
+func NewRegistry(opts ...RegistryOption) *Registry {
+	r := &Registry{entries: make(map[string]*entry)}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 func (r *Registry) Register(def schema.ToolDef, handler ToolHandler) error {
@@ -89,17 +102,29 @@ func (r *Registry) Merge(defs []schema.ToolDef) {
 	}
 }
 
+// SetExternalCaller sets the caller used for tools with no local handler.
+// Prefer WithExternalCaller at construction time when possible.
+func (r *Registry) SetExternalCaller(c ExternalToolCaller) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.externalCaller = c
+}
+
 func (r *Registry) Execute(ctx context.Context, name, args string) (schema.ToolResult, error) {
 	r.mu.RLock()
 	e, ok := r.entries[name]
+	extCaller := r.externalCaller
 	r.mu.RUnlock()
 	if !ok {
 		return schema.ToolResult{}, fmt.Errorf("tool %q not found", name)
 	}
-	if e.handler == nil {
-		return schema.ToolResult{}, fmt.Errorf("tool %q has no local handler", name)
+	if e.handler != nil {
+		return e.handler(ctx, name, args)
 	}
-	return e.handler(ctx, name, args)
+	if extCaller != nil {
+		return extCaller.CallTool(ctx, name, args)
+	}
+	return schema.ToolResult{}, fmt.Errorf("tool %q has no handler", name)
 }
 
 // ToAIModelTools converts tool definitions to the aimodel.Tool format for ChatRequest.

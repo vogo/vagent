@@ -122,7 +122,8 @@ func TestDAG_TimelinePopulated(t *testing.T) {
 func TestDAG_TimelineWithSkippedNode(t *testing.T) {
 	nodes := []Node{
 		{ID: "A", Runner: appendRunner("-A")},
-		{ID: "B", Runner: appendRunner("-B"), Deps: []string{"A"},
+		{
+			ID: "B", Runner: appendRunner("-B"), Deps: []string{"A"},
 			Condition: func(_ map[string]*schema.RunResponse) bool { return false },
 		},
 		{ID: "C", Runner: appendRunner("-C"), Deps: []string{"A"}},

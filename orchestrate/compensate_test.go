@@ -48,7 +48,7 @@ func (c *compensatableRunner) Idempotent() bool {
 
 func TestCompensate_BackwardCompensation(t *testing.T) {
 	var compensationOrder []string
-	var compensationMu = make(chan struct{}, 1)
+	compensationMu := make(chan struct{}, 1)
 
 	newCompRunner := func(id string) *compensatableRunner {
 		return &compensatableRunner{

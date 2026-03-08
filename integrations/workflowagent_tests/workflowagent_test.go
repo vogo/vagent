@@ -836,12 +836,12 @@ func TestIntegration_DAG_FanOutFanIn(t *testing.T) {
 		{ID: "d", Runner: newTextStep("d", "-D"), Deps: []string{"a"}},
 		{ID: "e", Runner: agent.NewCustomAgent(agent.Config{ID: "e"}, func(_ context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
 			// Collect all messages from upstream
-			var combined string
+			var combined strings.Builder
 			for _, m := range req.Messages {
-				combined += m.Content.Text() + ";"
+				combined.WriteString(m.Content.Text() + ";")
 			}
 			return &schema.RunResponse{
-				Messages: []schema.Message{schema.NewUserMessage(combined)},
+				Messages: []schema.Message{schema.NewUserMessage(combined.String())},
 			}, nil
 		}), Deps: []string{"b", "c", "d"}},
 	}
@@ -940,10 +940,11 @@ func TestIntegration_DAG_ConditionalNode(t *testing.T) {
 	var conditionalCalled atomic.Bool
 	nodes := []orchestrate.Node{
 		{ID: "a", Runner: newTextStep("a", "-A")},
-		{ID: "b", Runner: agent.NewCustomAgent(agent.Config{ID: "b"}, func(_ context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
-			conditionalCalled.Store(true)
-			return &schema.RunResponse{Messages: req.Messages}, nil
-		}), Deps: []string{"a"},
+		{
+			ID: "b", Runner: agent.NewCustomAgent(agent.Config{ID: "b"}, func(_ context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
+				conditionalCalled.Store(true)
+				return &schema.RunResponse{Messages: req.Messages}, nil
+			}), Deps: []string{"a"},
 			Condition: func(upstream map[string]*schema.RunResponse) bool {
 				return strings.Contains(upstream["a"].Messages[0].Content.Text(), "TRIGGER")
 			},
@@ -977,9 +978,10 @@ func TestIntegration_DAG_InputMapper(t *testing.T) {
 	nodes := []orchestrate.Node{
 		{ID: "a", Runner: newTextStep("a", "-A")},
 		{ID: "b", Runner: newTextStep("b", "-B")},
-		{ID: "c", Runner: agent.NewCustomAgent(agent.Config{ID: "c"}, func(_ context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
-			return &schema.RunResponse{Messages: req.Messages}, nil
-		}), Deps: []string{"a", "b"},
+		{
+			ID: "c", Runner: agent.NewCustomAgent(agent.Config{ID: "c"}, func(_ context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
+				return &schema.RunResponse{Messages: req.Messages}, nil
+			}), Deps: []string{"a", "b"},
 			InputMapper: func(upstream map[string]*schema.RunResponse) (*schema.RunRequest, error) {
 				aText := upstream["a"].Messages[0].Content.Text()
 				bText := upstream["b"].Messages[0].Content.Text()

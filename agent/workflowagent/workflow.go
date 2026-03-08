@@ -40,10 +40,10 @@ const (
 type Agent struct {
 	agent.Base
 	mode     workflowMode
-	steps    []agent.Agent          // sequence mode
-	dagCfg   orchestrate.DAGConfig  // DAG mode
-	dagNodes []orchestrate.Node     // DAG mode
-	loopNode orchestrate.LoopNode   // loop mode
+	steps    []agent.Agent         // sequence mode
+	dagCfg   orchestrate.DAGConfig // DAG mode
+	dagNodes []orchestrate.Node    // DAG mode
+	loopNode orchestrate.LoopNode  // loop mode
 }
 
 var (

@@ -60,7 +60,7 @@ func TestBackpressureController_AdditiveIncrease(t *testing.T) {
 	if err := bp.acquire(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(2 * time.Millisecond) // Ensure adjust interval passes.
+	time.Sleep(2 * time.Millisecond)  // Ensure adjust interval passes.
 	bp.release(10 * time.Millisecond) // Low latency.
 
 	// Should have increased by 1.

@@ -17,6 +17,12 @@
 
 package schema
 
+// Tool source constants.
+const (
+	ToolSourceLocal = "local"
+	ToolSourceMCP   = "mcp"
+)
+
 // ToolDef describes a tool that can be registered and invoked.
 type ToolDef struct {
 	Name         string `json:"name"`

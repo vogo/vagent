@@ -60,7 +60,7 @@ func TestResourceManager_RateLimits(t *testing.T) {
 
 	// First few should succeed quickly (burst).
 	start := time.Now()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := rm.acquire(ctx, []string{"api"}); err != nil {
 			t.Fatalf("acquire %d failed: %v", i, err)
 		}

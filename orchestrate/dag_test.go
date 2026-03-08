@@ -488,7 +488,8 @@ func TestExecuteDAG_InputMapper(t *testing.T) {
 	nodes := []Node{
 		{ID: "A", Runner: appendRunner("-A")},
 		{ID: "B", Runner: appendRunner("-B")},
-		{ID: "C", Runner: passthroughRunner(), Deps: []string{"A", "B"},
+		{
+			ID: "C", Runner: passthroughRunner(), Deps: []string{"A", "B"},
 			InputMapper: func(upstream map[string]*schema.RunResponse) (*schema.RunRequest, error) {
 				aText := upstream["A"].Messages[0].Content.Text()
 				bText := upstream["B"].Messages[0].Content.Text()
@@ -575,7 +576,8 @@ func TestExecuteDAG_ConditionalNode(t *testing.T) {
 	// A -> B (conditional: only if A output contains "yes"), A -> C
 	nodes := []Node{
 		{ID: "A", Runner: appendRunner("-no")},
-		{ID: "B", Runner: appendRunner("-B"), Deps: []string{"A"},
+		{
+			ID: "B", Runner: appendRunner("-B"), Deps: []string{"A"},
 			Condition: func(upstream map[string]*schema.RunResponse) bool {
 				return strings.Contains(upstream["A"].Messages[0].Content.Text(), "yes")
 			},
@@ -635,10 +637,12 @@ func TestExecuteDAG_ChainedConditionalSkip(t *testing.T) {
 	// B and C should both be skipped, D should still run with original input.
 	nodes := []Node{
 		{ID: "A", Runner: appendRunner("-A")},
-		{ID: "B", Runner: appendRunner("-B"), Deps: []string{"A"},
+		{
+			ID: "B", Runner: appendRunner("-B"), Deps: []string{"A"},
 			Condition: func(_ map[string]*schema.RunResponse) bool { return false },
 		},
-		{ID: "C", Runner: appendRunner("-C"), Deps: []string{"B"},
+		{
+			ID: "C", Runner: appendRunner("-C"), Deps: []string{"B"},
 			Condition: func(_ map[string]*schema.RunResponse) bool { return false },
 		},
 		{ID: "D", Runner: appendRunner("-D"), Deps: []string{"C"}},

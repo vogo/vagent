@@ -511,8 +511,8 @@ func (de *dagExecutor) finalize() (*DAGResult, error) {
 // backpressure, and resource management support. Caller must hold mu.
 func launchNodeAdvanced(ctx context.Context, node *Node, req *schema.RunRequest,
 	sem chan struct{}, bpCtrl *backpressureController, resMgr *resourceManager,
-	timeline *timelineTracker, result *DAGResult, doneCh chan<- nodeCompletion) {
-
+	timeline *timelineTracker, result *DAGResult, doneCh chan<- nodeCompletion,
+) {
 	result.NodeStatus[node.ID] = NodeRunning
 	timeline.recordStart(node.ID)
 

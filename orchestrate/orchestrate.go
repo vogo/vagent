@@ -79,15 +79,15 @@ type DAGConfig struct {
 	ErrorStrategy      ErrorStrategy
 	EarlyExitFunc      func(nodeID string, resp *schema.RunResponse) bool
 	Aggregator         Aggregator
-	CheckpointStore    CheckpointStore        // Optional checkpoint store for save/resume.
-	ReplayMode         bool                   // When true, replay from checkpoint without executing runners.
-	PriorityScheduling bool                   // Use priority queue for ready nodes (default: FIFO).
-	CriticalPathAuto   bool                   // Auto-compute critical path priorities (requires PriorityScheduling).
-	BackpressureCfg    *BackpressureConfig    // Adaptive concurrency control (nil = disabled).
-	ResourceLimits     map[string]int         // Per-resource-tag concurrency limits.
-	ResourceRateLimits map[string]float64     // Per-resource-tag rate limits (requests/second).
-	CompensateCfg      *CompensateConfig      // Compensation configuration (nil = disabled).
-	EventHandler       DAGEventHandler        // Optional event handler for observability (nil = disabled).
+	CheckpointStore    CheckpointStore     // Optional checkpoint store for save/resume.
+	ReplayMode         bool                // When true, replay from checkpoint without executing runners.
+	PriorityScheduling bool                // Use priority queue for ready nodes (default: FIFO).
+	CriticalPathAuto   bool                // Auto-compute critical path priorities (requires PriorityScheduling).
+	BackpressureCfg    *BackpressureConfig // Adaptive concurrency control (nil = disabled).
+	ResourceLimits     map[string]int      // Per-resource-tag concurrency limits.
+	ResourceRateLimits map[string]float64  // Per-resource-tag rate limits (requests/second).
+	CompensateCfg      *CompensateConfig   // Compensation configuration (nil = disabled).
+	EventHandler       DAGEventHandler     // Optional event handler for observability (nil = disabled).
 }
 
 // DAGOption is a functional option for configuring DAG execution.

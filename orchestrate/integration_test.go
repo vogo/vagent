@@ -128,7 +128,7 @@ func TestTokenBucket_PreciseWait(t *testing.T) {
 	tb := newTokenBucket(10.0)
 	ctx := context.Background()
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if err := tb.wait(ctx); err != nil {
 			t.Fatalf("burst wait %d failed: %v", i, err)
 		}

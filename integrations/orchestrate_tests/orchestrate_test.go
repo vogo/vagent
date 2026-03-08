@@ -513,7 +513,8 @@ func TestEventHandler_SkippedConditional(t *testing.T) {
 	handler := &testEventHandler{}
 	nodes := []orchestrate.Node{
 		{ID: "A", Runner: appendRunner("-A")},
-		{ID: "B", Runner: appendRunner("-B"), Deps: []string{"A"},
+		{
+			ID: "B", Runner: appendRunner("-B"), Deps: []string{"A"},
 			Condition: func(_ map[string]*schema.RunResponse) bool { return false },
 		},
 		{ID: "C", Runner: appendRunner("-C"), Deps: []string{"A"}},
@@ -757,7 +758,8 @@ func TestIntegration_ConditionalSkipWithCheckpoint(t *testing.T) {
 
 	nodes := []orchestrate.Node{
 		{ID: "A", Runner: appendRunner("-A")},
-		{ID: "skip", Runner: appendRunner("-skip"), Deps: []string{"A"},
+		{
+			ID: "skip", Runner: appendRunner("-skip"), Deps: []string{"A"},
 			Condition: func(_ map[string]*schema.RunResponse) bool { return false },
 		},
 		{ID: "C", Runner: appendRunner("-C"), Deps: []string{"A"}},
@@ -1241,7 +1243,8 @@ func TestBuildDAG_WithCompensation(t *testing.T) {
 func TestBuildDAG_WithConditionalSkip(t *testing.T) {
 	nodes := []orchestrate.Node{
 		{ID: "A", Runner: appendRunner("-A")},
-		{ID: "B", Runner: appendRunner("-B"),
+		{
+			ID: "B", Runner: appendRunner("-B"),
 			Condition: func(_ map[string]*schema.RunResponse) bool { return false },
 		},
 		{ID: "C", Runner: appendRunner("-C")},

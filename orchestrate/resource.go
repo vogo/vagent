@@ -54,10 +54,7 @@ func (tb *tokenBucket) wait(ctx context.Context) error {
 		}
 		// Calculate exact wait time for one token to become available.
 		deficit := 1.0 - tb.tokens
-		waitDur := time.Duration(deficit / tb.rate * float64(time.Second))
-		if waitDur < time.Millisecond {
-			waitDur = time.Millisecond
-		}
+		waitDur := max(time.Duration(deficit/tb.rate*float64(time.Second)), time.Millisecond)
 		tb.mu.Unlock()
 
 		select {
@@ -83,7 +80,7 @@ func (tb *tokenBucket) refill() {
 // resourceManager manages per-resource-tag concurrency limits and rate limits.
 type resourceManager struct {
 	concurrencySems map[string]chan struct{} // tag -> semaphore channel
-	rateLimiters    map[string]*tokenBucket // tag -> rate limiter
+	rateLimiters    map[string]*tokenBucket  // tag -> rate limiter
 }
 
 func newResourceManager(limits map[string]int, rateLimits map[string]float64) *resourceManager {

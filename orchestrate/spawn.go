@@ -30,12 +30,12 @@ type spawnDepthKey struct{}
 
 // DynamicSpawnNode generates child nodes at runtime from the parent's output (Map-Reduce pattern).
 type DynamicSpawnNode struct {
-	Node                                                                                             // Embedded base node.
-	Spawner         func(ctx context.Context, output *schema.RunResponse) ([]Node, error)            // Generates child nodes.
-	SpawnAggregator Aggregator                                                                       // Aggregates child results.
-	MaxSpawnCount   int                                                                              // Max number of spawned nodes (0 = unlimited).
-	SpawnTimeout    time.Duration                                                                    // Timeout for all spawned nodes (0 = no timeout).
-	SpawnDepthLimit int                                                                              // Max recursion depth for nested spawns (0 = no nesting).
+	Node                                                                                  // Embedded base node.
+	Spawner         func(ctx context.Context, output *schema.RunResponse) ([]Node, error) // Generates child nodes.
+	SpawnAggregator Aggregator                                                            // Aggregates child results.
+	MaxSpawnCount   int                                                                   // Max number of spawned nodes (0 = unlimited).
+	SpawnTimeout    time.Duration                                                         // Timeout for all spawned nodes (0 = no timeout).
+	SpawnDepthLimit int                                                                   // Max recursion depth for nested spawns (0 = no nesting).
 }
 
 // ExecuteDynamicSpawn executes a DynamicSpawnNode:

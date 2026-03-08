@@ -105,7 +105,6 @@ service ──→ guard ──→ agent ──→ memory
   │                     └──→ largemodel ──→ aimodel
   │
   └──→ mcp/server ──→ agent
-              │──→ mcp/transport
 
 agent, tool, largemodel ──→ aimodel (ChatCompleter / ComposeClient)
 mcp/* ──→ github.com/modelcontextprotocol/go-sdk (外部)
@@ -125,7 +124,7 @@ schema ←── (所有包共享)
 | `tool`        | 工具注册表、工具执行器、与 aimodel ToolCall 的桥接     |
 | `mcp/client`  | MCP 客户端，发现并调用外部 MCP 服务暴露的工具         |
 | `mcp/server`  | MCP 服务端，将 Agent 能力通过 MCP 协议暴露             |
-| `mcp/transport` | MCP 传输层抽象（stdio、SSE、Streamable HTTP）        |
+| `go-sdk/mcp`    | 官方 MCP SDK，提供传输层（stdio、SSE、Streamable HTTP）|
 | `hook`        | Hook 定义与分发，支持轨迹采集                          |
 | `orchestrate` | 多 Agent 编排引擎，支持顺序/并行/条件模式              |
 | `service`     | 服务配置、HTTP 路由、Server 启停管理                   |

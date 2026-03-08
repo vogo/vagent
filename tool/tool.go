@@ -32,6 +32,11 @@ type ToolExecutor interface {
 	Execute(ctx context.Context, name, args string) (schema.ToolResult, error)
 }
 
+// ExternalToolCaller calls tools that are not handled locally.
+type ExternalToolCaller interface {
+	CallTool(ctx context.Context, name, args string) (schema.ToolResult, error)
+}
+
 // ToolRegistry manages tool definitions and their handlers.
 type ToolRegistry interface {
 	ToolExecutor

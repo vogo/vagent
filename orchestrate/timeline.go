@@ -26,10 +26,10 @@ import (
 // NodeTimeline records the execution timing of a single node.
 type NodeTimeline struct {
 	NodeID    string        `json:"node_id"`
-	StartTime time.Time    `json:"start_time"`
-	EndTime   time.Time    `json:"end_time"`
+	StartTime time.Time     `json:"start_time"`
+	EndTime   time.Time     `json:"end_time"`
 	Duration  time.Duration `json:"duration_ns"`
-	Status    NodeStatus   `json:"status"`
+	Status    NodeStatus    `json:"status"`
 }
 
 // timelineTracker records node execution timing in a thread-safe manner.

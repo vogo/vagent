@@ -60,8 +60,8 @@ type CompensateConfig struct {
 // executeBackwardCompensation performs backward compensation (Saga rollback).
 // It compensates completed nodes in reverse topological order.
 func executeBackwardCompensation(ctx context.Context, cfg *CompensateConfig,
-	nodes []Node, result *DAGResult) error {
-
+	nodes []Node, result *DAGResult,
+) error {
 	// Get completed nodes in topological order.
 	topoOrder := topologicalSort(nodes)
 
@@ -112,8 +112,8 @@ func executeBackwardCompensation(ctx context.Context, cfg *CompensateConfig,
 
 // executeNodeCompensation compensates a single node with timeout and retry support.
 func executeNodeCompensation(ctx context.Context, cfg *CompensateConfig,
-	nodeID string, comp Compensatable, resp *schema.RunResponse) error {
-
+	nodeID string, comp Compensatable, resp *schema.RunResponse,
+) error {
 	maxAttempts := 1
 	idempotent := false
 	if ic, ok := comp.(IdempotentChecker); ok {
@@ -148,8 +148,8 @@ func executeNodeCompensation(ctx context.Context, cfg *CompensateConfig,
 
 // executeForwardRecovery retries the failed node until success or max retries.
 func executeForwardRecovery(ctx context.Context, cfg *CompensateConfig,
-	node *Node, req *schema.RunRequest) (*schema.RunResponse, error) {
-
+	node *Node, req *schema.RunRequest,
+) (*schema.RunResponse, error) {
 	maxAttempts := cfg.MaxRetries + 1
 	if maxAttempts <= 0 {
 		maxAttempts = 1
@@ -183,7 +183,8 @@ func executeForwardRecovery(ctx context.Context, cfg *CompensateConfig,
 
 // compensateWithTimeout runs compensation with an optional timeout.
 func compensateWithTimeout(ctx context.Context, timeout time.Duration,
-	comp Compensatable, resp *schema.RunResponse) error {
+	comp Compensatable, resp *schema.RunResponse,
+) error {
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -194,7 +195,8 @@ func compensateWithTimeout(ctx context.Context, timeout time.Duration,
 
 // runRunnerWithTimeout runs a Runner with an optional timeout.
 func runRunnerWithTimeout(ctx context.Context, timeout time.Duration,
-	runner Runner, req *schema.RunRequest) (*schema.RunResponse, error) {
+	runner Runner, req *schema.RunRequest,
+) (*schema.RunResponse, error) {
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -202,4 +204,3 @@ func runRunnerWithTimeout(ctx context.Context, timeout time.Duration,
 	}
 	return runner.Run(ctx, req)
 }
-
