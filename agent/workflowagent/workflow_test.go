@@ -26,6 +26,7 @@ import (
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/agent"
+	"github.com/vogo/vagent/orchestrate"
 	"github.com/vogo/vagent/schema"
 )
 
@@ -420,6 +421,180 @@ func TestAgent_RunStream_EmptySteps(t *testing.T) {
 	}
 
 	// Expect EOF.
+	_, err = stream.Recv()
+	if !errors.Is(err, io.EOF) {
+		t.Errorf("expected io.EOF, got %v", err)
+	}
+}
+
+// --- DAG workflow tests ---
+
+func TestAgent_RunDAG_Diamond(t *testing.T) {
+	stepA := makeStep("a", "-a")
+	stepB := makeStep("b", "-b")
+	stepC := makeStep("c", "-c")
+	stepD := agent.NewCustomAgent(agent.Config{ID: "d"}, func(_ context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
+		return &schema.RunResponse{Messages: req.Messages}, nil
+	})
+
+	nodes := []orchestrate.Node{
+		{ID: "a", Runner: stepA},
+		{ID: "b", Runner: stepB, Deps: []string{"a"}},
+		{ID: "c", Runner: stepC, Deps: []string{"a"}},
+		{ID: "d", Runner: stepD, Deps: []string{"b", "c"}},
+	}
+	wf := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
+	resp, err := wf.Run(context.Background(), &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("start")},
+		SessionID: "dag-session",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(resp.Messages))
+	}
+	if resp.SessionID != "dag-session" {
+		t.Errorf("SessionID = %q, want %q", resp.SessionID, "dag-session")
+	}
+	if resp.Duration < 0 {
+		t.Errorf("expected non-negative Duration, got %d", resp.Duration)
+	}
+}
+
+func TestAgent_RunDAG_Error(t *testing.T) {
+	stepA := makeErrorStep("a", errors.New("dag node failed"))
+	nodes := []orchestrate.Node{
+		{ID: "a", Runner: stepA},
+	}
+	wf := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
+	_, err := wf.Run(context.Background(), &schema.RunRequest{
+		Messages: []schema.Message{schema.NewUserMessage("start")},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "dag node failed") {
+		t.Errorf("error should contain original message: %v", err)
+	}
+}
+
+func TestAgent_RunLoop_Basic(t *testing.T) {
+	body := makeStep("loop-body", "-iter")
+	wf := NewLoop(agent.Config{ID: "wf-loop"}, body, nil, 3)
+	resp, err := wf.Run(context.Background(), &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("start")},
+		SessionID: "loop-session",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := resp.Messages[0].Content.Text()
+	if got != "start-iter-iter-iter" {
+		t.Errorf("got %q, want %q", got, "start-iter-iter-iter")
+	}
+	if resp.SessionID != "loop-session" {
+		t.Errorf("SessionID = %q, want %q", resp.SessionID, "loop-session")
+	}
+	if resp.Duration < 0 {
+		t.Errorf("expected non-negative Duration, got %d", resp.Duration)
+	}
+}
+
+func TestAgent_RunLoop_Condition(t *testing.T) {
+	callCount := 0
+	body := agent.NewCustomAgent(agent.Config{ID: "loop-body"}, func(_ context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
+		callCount++
+		text := req.Messages[0].Content.Text()
+		return &schema.RunResponse{
+			Messages: []schema.Message{schema.NewUserMessage(text + "-iter")},
+		}, nil
+	})
+	condition := func(resp *schema.RunResponse) bool {
+		if resp == nil {
+			return true
+		}
+		return !strings.Contains(resp.Messages[0].Content.Text(), "-iter-iter")
+	}
+	wf := NewLoop(agent.Config{ID: "wf-loop"}, body, condition, 0)
+	resp, err := wf.Run(context.Background(), &schema.RunRequest{
+		Messages: []schema.Message{schema.NewUserMessage("start")},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 iterations, got %d", callCount)
+	}
+	got := resp.Messages[0].Content.Text()
+	if got != "start-iter-iter" {
+		t.Errorf("got %q, want %q", got, "start-iter-iter")
+	}
+}
+
+func TestAgent_RunDAG_Stream(t *testing.T) {
+	stepA := makeStep("a", "-a")
+	nodes := []orchestrate.Node{
+		{ID: "a", Runner: stepA},
+	}
+	wf := NewDAG(agent.Config{ID: "wf-dag"}, orchestrate.DAGConfig{}, nodes)
+	stream, err := wf.RunStream(context.Background(), &schema.RunRequest{
+		Messages: []schema.Message{schema.NewUserMessage("hello")},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	e, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("recv error: %v", err)
+	}
+	if e.Type != schema.EventAgentStart {
+		t.Errorf("expected AgentStart, got %s", e.Type)
+	}
+
+	e, err = stream.Recv()
+	if err != nil {
+		t.Fatalf("recv error: %v", err)
+	}
+	if e.Type != schema.EventAgentEnd {
+		t.Errorf("expected AgentEnd, got %s", e.Type)
+	}
+
+	_, err = stream.Recv()
+	if !errors.Is(err, io.EOF) {
+		t.Errorf("expected io.EOF, got %v", err)
+	}
+}
+
+func TestAgent_RunLoop_Stream(t *testing.T) {
+	body := makeStep("loop-body", "-iter")
+	wf := NewLoop(agent.Config{ID: "wf-loop"}, body, nil, 2)
+	stream, err := wf.RunStream(context.Background(), &schema.RunRequest{
+		Messages: []schema.Message{schema.NewUserMessage("hello")},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	e, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("recv error: %v", err)
+	}
+	if e.Type != schema.EventAgentStart {
+		t.Errorf("expected AgentStart, got %s", e.Type)
+	}
+
+	e, err = stream.Recv()
+	if err != nil {
+		t.Fatalf("recv error: %v", err)
+	}
+	if e.Type != schema.EventAgentEnd {
+		t.Errorf("expected AgentEnd, got %s", e.Type)
+	}
+
 	_, err = stream.Recv()
 	if !errors.Is(err, io.EOF) {
 		t.Errorf("expected io.EOF, got %v", err)

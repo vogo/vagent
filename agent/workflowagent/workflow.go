@@ -24,13 +24,26 @@ import (
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/agent"
+	"github.com/vogo/vagent/orchestrate"
 	"github.com/vogo/vagent/schema"
 )
 
-// Agent executes a sequence of sub-agents in order.
+type workflowMode int
+
+const (
+	modeSequence workflowMode = iota
+	modeDAG
+	modeLoop
+)
+
+// Agent executes workflows using the orchestrate engine.
 type Agent struct {
 	agent.Base
-	steps []agent.Agent
+	mode     workflowMode
+	steps    []agent.Agent          // sequence mode
+	dagCfg   orchestrate.DAGConfig  // DAG mode
+	dagNodes []orchestrate.Node     // DAG mode
+	loopNode orchestrate.LoopNode   // loop mode
 }
 
 var (
@@ -42,22 +55,68 @@ var (
 func New(cfg agent.Config, steps ...agent.Agent) *Agent {
 	return &Agent{
 		Base:  agent.NewBase(cfg),
+		mode:  modeSequence,
 		steps: steps,
 	}
 }
 
-// Steps returns the sub-agents in this workflow.
+// NewDAG creates a DAG workflow with explicit node dependencies.
+func NewDAG(cfg agent.Config, dagCfg orchestrate.DAGConfig, nodes []orchestrate.Node) *Agent {
+	return &Agent{
+		Base:     agent.NewBase(cfg),
+		mode:     modeDAG,
+		dagCfg:   dagCfg,
+		dagNodes: nodes,
+	}
+}
+
+// NewLoop creates a loop workflow.
+func NewLoop(cfg agent.Config, body agent.Agent, condition func(*schema.RunResponse) bool, maxIters int) *Agent {
+	return &Agent{
+		Base: agent.NewBase(cfg),
+		mode: modeLoop,
+		loopNode: orchestrate.LoopNode{
+			Body:      body,
+			Condition: condition,
+			MaxIters:  maxIters,
+		},
+	}
+}
+
+// Steps returns the sub-agents in this workflow (sequence mode only).
 func (a *Agent) Steps() []agent.Agent { return a.steps }
 
-// Run executes each step sequentially, passing the output of each step as input to the next.
+// Run executes the workflow based on its mode.
 func (a *Agent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
 	start := time.Now()
 
+	var resp *schema.RunResponse
+	var err error
+
+	switch a.mode {
+	case modeSequence:
+		resp, err = a.runSequence(ctx, req)
+	case modeDAG:
+		resp, err = a.runDAG(ctx, req)
+	case modeLoop:
+		resp, err = a.runLoop(ctx, req)
+	default:
+		return nil, fmt.Errorf("vagent: unknown workflow mode %d", a.mode)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	resp.Duration = time.Since(start).Milliseconds()
+	return resp, nil
+}
+
+func (a *Agent) runSequence(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
 	if len(a.steps) == 0 {
 		return &schema.RunResponse{
 			Messages:  req.Messages,
 			SessionID: req.SessionID,
-			Duration:  time.Since(start).Milliseconds(),
 		}, nil
 	}
 
@@ -98,13 +157,39 @@ func (a *Agent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunRes
 		Messages:  lastResp.Messages,
 		Metadata:  lastResp.Metadata,
 		SessionID: req.SessionID,
-		Duration:  time.Since(start).Milliseconds(),
 	}
 	if hasUsage {
 		result.Usage = &totalUsage
 	}
 
 	return result, nil
+}
+
+func (a *Agent) runDAG(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
+	dagResult, err := orchestrate.ExecuteDAG(ctx, a.dagCfg, a.dagNodes, req)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := dagResult.FinalOutput
+	if resp == nil {
+		resp = &schema.RunResponse{Messages: req.Messages, SessionID: req.SessionID}
+	}
+	resp.SessionID = req.SessionID
+	if dagResult.Usage != nil {
+		resp.Usage = dagResult.Usage
+	}
+	return resp, nil
+}
+
+func (a *Agent) runLoop(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
+	resp, err := orchestrate.ExecuteLoop(ctx, a.loopNode, req)
+	if err != nil {
+		return nil, err
+	}
+
+	resp.SessionID = req.SessionID
+	return resp, nil
 }
 
 // RunStream returns a RunStream that emits lifecycle events as the pipeline executes.
