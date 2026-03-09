@@ -21,15 +21,18 @@ package schema
 const (
 	ToolSourceLocal = "local"
 	ToolSourceMCP   = "mcp"
+	ToolSourceAgent = "agent"
 )
 
 // ToolDef describes a tool that can be registered and invoked.
 type ToolDef struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Parameters   any    `json:"parameters,omitempty"` // JSON Schema
-	Required     bool   `json:"required,omitempty"`
-	Source       string `json:"source,omitempty"` // e.g. "local", "mcp"
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Parameters  any    `json:"parameters,omitempty"` // JSON Schema
+	// ForceUse indicates whether the LLM must invoke this tool (i.e. forced tool choice).
+	// It does NOT refer to parameter-level "required" in JSON Schema.
+	ForceUse     bool   `json:"force_use,omitempty"`
+	Source       string `json:"source,omitempty"` // e.g. "local", "mcp", "agent"
 	MCPServerURI string `json:"mcp_server_uri,omitempty"`
 	AgentID      string `json:"agent_id,omitempty"`
 }

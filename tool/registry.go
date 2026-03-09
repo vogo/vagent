@@ -65,6 +65,21 @@ func (r *Registry) Register(def schema.ToolDef, handler ToolHandler) error {
 	return nil
 }
 
+// registerIfAbsent atomically checks for duplicates and registers under a single write lock
+// to avoid a TOCTOU race between a separate read-lock check and Register().
+func (r *Registry) registerIfAbsent(def schema.ToolDef, handler ToolHandler) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.entries[def.Name]; exists {
+		return fmt.Errorf("tool %q already registered", def.Name)
+	}
+
+	r.entries[def.Name] = &entry{def: def, handler: handler}
+
+	return nil
+}
+
 func (r *Registry) Unregister(name string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -15,8 +15,13 @@
 .vscode
 .work
 .claude
+.autodev
+
 CLAUDE.md
 
 # Compiled binaries
 /llmagent
+
+
+.DS_Store
 
