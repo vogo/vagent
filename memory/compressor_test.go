@@ -118,6 +118,76 @@ func TestSlidingWindowCompressor_NegativeWindowPanics(t *testing.T) {
 	NewSlidingWindowCompressor(-1)
 }
 
+func TestSlidingWindowCompressor_MaxTokens(t *testing.T) {
+	t.Run("unlimited", func(t *testing.T) {
+		c := NewSlidingWindowCompressor(3)
+		msgs := []schema.Message{
+			schema.NewUserMessage("aaaa"),     // 1 token
+			schema.NewUserMessage("bbbbbbbb"), // 2 tokens
+			schema.NewUserMessage("cccc"),     // 1 token
+			schema.NewUserMessage("dddd"),     // 1 token
+			schema.NewUserMessage("eeee"),     // 1 token
+		}
+		result, err := c.Compress(context.Background(), msgs, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 3 {
+			t.Fatalf("got %d messages, want 3", len(result))
+		}
+	})
+
+	t.Run("trims within window", func(t *testing.T) {
+		c := NewSlidingWindowCompressor(5)
+		msgs := []schema.Message{
+			schema.NewUserMessage("aaaa"),                 // 1 token
+			schema.NewUserMessage("bbbbbbbb"),             // 2 tokens
+			schema.NewUserMessage("cccccccccccccccccccc"), // 5 tokens
+			schema.NewUserMessage("dddd"),                 // 1 token
+			schema.NewUserMessage("eeee"),                 // 1 token
+		}
+		// Budget=2 fits last 2 messages (1+1=2)
+		result, err := c.Compress(context.Background(), msgs, 2)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 2 {
+			t.Fatalf("got %d messages, want 2", len(result))
+		}
+		if result[0].Content.Text() != "dddd" {
+			t.Errorf("result[0] = %q, want %q", result[0].Content.Text(), "dddd")
+		}
+		if result[1].Content.Text() != "eeee" {
+			t.Errorf("result[1] = %q, want %q", result[1].Content.Text(), "eeee")
+		}
+	})
+
+	t.Run("single oversized message", func(t *testing.T) {
+		c := NewSlidingWindowCompressor(3)
+		msgs := []schema.Message{
+			schema.NewUserMessage("this is a long message that exceeds the budget"),
+		}
+		result, err := c.Compress(context.Background(), msgs, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 1 {
+			t.Fatalf("got %d messages, want 1", len(result))
+		}
+	})
+
+	t.Run("empty input with maxTokens", func(t *testing.T) {
+		c := NewSlidingWindowCompressor(3)
+		result, err := c.Compress(context.Background(), []schema.Message{}, 100)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 0 {
+			t.Fatalf("got %d messages, want 0", len(result))
+		}
+	})
+}
+
 func TestCompressFunc(t *testing.T) {
 	// Custom compressor that drops all but the last message.
 	f := CompressFunc(func(_ context.Context, msgs []schema.Message, _ int) ([]schema.Message, error) {
