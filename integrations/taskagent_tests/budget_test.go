@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package llmagent_tests //nolint:revive // integration test package
+package taskagent_tests //nolint:revive // integration test package
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/agent/llmagent"
+	"github.com/vogo/vagent/agent/taskagent"
 	"github.com/vogo/vagent/guard"
 	"github.com/vogo/vagent/hook"
 	"github.com/vogo/vagent/schema"
@@ -146,7 +146,7 @@ func collectEvents(hm *hook.Manager) *[]schema.Event {
 
 // Test 1: Budget exhaustion returns partial results (Run).
 //
-// Configures an LLMAgent with a mock ChatCompleter that returns responses with
+// Configures an TaskAgent with a mock ChatCompleter that returns responses with
 // known usage (100 tokens per call). Sets budget to 200 to allow exactly 2 LLM
 // calls. Verifies:
 //   - The third call is prevented by the pre-call budget check.
@@ -166,11 +166,11 @@ func TestBudgetExhaustion_Run_PartialResults(t *testing.T) {
 		},
 	}
 
-	a := llmagent.New(agent.Config{ID: "budget-test-agent"},
-		llmagent.WithChatCompleter(mock),
-		llmagent.WithToolRegistry(noopTool("do_thing")),
-		llmagent.WithRunTokenBudget(200),
-		llmagent.WithMaxIterations(10),
+	a := taskagent.New(agent.Config{ID: "budget-test-agent"},
+		taskagent.WithChatCompleter(mock),
+		taskagent.WithToolRegistry(noopTool("do_thing")),
+		taskagent.WithRunTokenBudget(200),
+		taskagent.WithMaxIterations(10),
 	)
 
 	resp, err := a.Run(context.Background(), &schema.RunRequest{
@@ -213,7 +213,7 @@ func TestBudgetExhaustion_Run_PartialResults(t *testing.T) {
 
 // Test 2: Budget exhaustion emits correct events (Run path with hooks).
 //
-// Configures an LLMAgent with a mock ChatCompleter and a hook manager.
+// Configures an TaskAgent with a mock ChatCompleter and a hook manager.
 // Sets a small budget that exhausts after the first LLM call. Verifies:
 //   - EventTokenBudgetExhausted appears in the event sequence.
 //   - It appears before EventAgentEnd.
@@ -230,11 +230,11 @@ func TestBudgetExhaustion_EmitsCorrectEvents(t *testing.T) {
 		},
 	}
 
-	a := llmagent.New(agent.Config{ID: "event-test-agent"},
-		llmagent.WithChatCompleter(mock),
-		llmagent.WithToolRegistry(noopTool("tool1")),
-		llmagent.WithRunTokenBudget(100),
-		llmagent.WithHookManager(hm),
+	a := taskagent.New(agent.Config{ID: "event-test-agent"},
+		taskagent.WithChatCompleter(mock),
+		taskagent.WithToolRegistry(noopTool("tool1")),
+		taskagent.WithRunTokenBudget(100),
+		taskagent.WithHookManager(hm),
 	)
 
 	resp, err := a.Run(context.Background(), &schema.RunRequest{
@@ -322,10 +322,10 @@ func TestUnlimitedBudget_PreservesBehavior(t *testing.T) {
 		},
 	}
 
-	a := llmagent.New(agent.Config{ID: "unlimited-budget-agent"},
-		llmagent.WithChatCompleter(mock),
-		llmagent.WithToolRegistry(noopTool("tool1")),
-		llmagent.WithHookManager(hm),
+	a := taskagent.New(agent.Config{ID: "unlimited-budget-agent"},
+		taskagent.WithChatCompleter(mock),
+		taskagent.WithToolRegistry(noopTool("tool1")),
+		taskagent.WithHookManager(hm),
 		// No WithRunTokenBudget -- defaults to 0 (unlimited)
 	)
 
@@ -378,10 +378,10 @@ func TestPerRequestBudgetOverride(t *testing.T) {
 		},
 	}
 
-	a := llmagent.New(agent.Config{ID: "override-agent"},
-		llmagent.WithChatCompleter(mock),
-		llmagent.WithToolRegistry(noopTool("tool1")),
-		llmagent.WithRunTokenBudget(10000), // Agent default: generous budget
+	a := taskagent.New(agent.Config{ID: "override-agent"},
+		taskagent.WithChatCompleter(mock),
+		taskagent.WithToolRegistry(noopTool("tool1")),
+		taskagent.WithRunTokenBudget(10000), // Agent default: generous budget
 	)
 
 	resp, err := a.Run(context.Background(), &schema.RunRequest{
@@ -436,11 +436,11 @@ func TestMaxIterationsExhaustion_ReturnsPartialResult(t *testing.T) {
 		},
 	}
 
-	a := llmagent.New(agent.Config{ID: "maxiter-agent"},
-		llmagent.WithChatCompleter(mock),
-		llmagent.WithToolRegistry(noopTool("looper")),
-		llmagent.WithMaxIterations(2),
-		llmagent.WithHookManager(hm),
+	a := taskagent.New(agent.Config{ID: "maxiter-agent"},
+		taskagent.WithChatCompleter(mock),
+		taskagent.WithToolRegistry(noopTool("looper")),
+		taskagent.WithMaxIterations(2),
+		taskagent.WithHookManager(hm),
 	)
 
 	resp, err := a.Run(context.Background(), &schema.RunRequest{
@@ -515,11 +515,11 @@ func TestBudgetExhaustion_OutputGuardsRun(t *testing.T) {
 
 	outputGuard := &rewriteGuard{replacement: "GUARDED OUTPUT"}
 
-	a := llmagent.New(agent.Config{ID: "guard-budget-agent"},
-		llmagent.WithChatCompleter(mock),
-		llmagent.WithToolRegistry(noopTool("tool1")),
-		llmagent.WithRunTokenBudget(100),
-		llmagent.WithOutputGuards(outputGuard),
+	a := taskagent.New(agent.Config{ID: "guard-budget-agent"},
+		taskagent.WithChatCompleter(mock),
+		taskagent.WithToolRegistry(noopTool("tool1")),
+		taskagent.WithRunTokenBudget(100),
+		taskagent.WithOutputGuards(outputGuard),
 	)
 
 	resp, err := a.Run(context.Background(), &schema.RunRequest{
@@ -566,11 +566,11 @@ func TestBudgetExhaustion_RunToStream_CleanClose(t *testing.T) {
 		},
 	}
 
-	a := llmagent.New(agent.Config{ID: "stream-budget-agent"},
-		llmagent.WithChatCompleter(mock),
-		llmagent.WithToolRegistry(noopTool("tool1")),
-		llmagent.WithRunTokenBudget(100),
-		llmagent.WithHookManager(hm),
+	a := taskagent.New(agent.Config{ID: "stream-budget-agent"},
+		taskagent.WithChatCompleter(mock),
+		taskagent.WithToolRegistry(noopTool("tool1")),
+		taskagent.WithRunTokenBudget(100),
+		taskagent.WithHookManager(hm),
 	)
 
 	req := &schema.RunRequest{
@@ -664,11 +664,11 @@ func TestBudgetExact_CompletesNormally(t *testing.T) {
 		},
 	}
 
-	a := llmagent.New(agent.Config{ID: "exact-budget-agent"},
-		llmagent.WithChatCompleter(mock),
-		llmagent.WithToolRegistry(noopTool("tool1")),
-		llmagent.WithRunTokenBudget(200),
-		llmagent.WithMaxIterations(10),
+	a := taskagent.New(agent.Config{ID: "exact-budget-agent"},
+		taskagent.WithChatCompleter(mock),
+		taskagent.WithToolRegistry(noopTool("tool1")),
+		taskagent.WithRunTokenBudget(200),
+		taskagent.WithMaxIterations(10),
 	)
 
 	resp, err := a.Run(context.Background(), &schema.RunRequest{

@@ -30,7 +30,7 @@ type Agent interface {
 
 ### StreamAgent 接口
 
-扩展接口，增加流式执行能力。LLMAgent 原生支持流式，RouterAgent 和 WorkflowAgent 通过 `RunToStream` 适配。
+扩展接口，增加流式执行能力。TaskAgent 原生支持流式，RouterAgent 和 WorkflowAgent 通过 `RunToStream` 适配。
 
 ```go
 type StreamAgent interface {
@@ -84,21 +84,21 @@ type Base struct {
        ┌─────────┬───┴────┬──────────┐
        ▼         ▼        ▼          ▼
   ┌─────────┐ ┌──────┐ ┌──────┐ ┌──────┐
-  │LLMAgent │ │Work- │ │Router│ │Custom│
+  │TaskAgent │ │Work- │ │Router│ │Custom│
   │         │ │flow  │ │Agent │ │Agent │
   └─────────┘ └──────┘ └──────┘ └──────┘
 ```
 
 | Agent 类型    | 包路径                    | 实现接口                  | 说明                               |
 | ------------- | ------------------------- | ------------------------- | ---------------------------------- |
-| LLMAgent      | `agent/llmagent`          | Agent, StreamAgent        | ReAct 式工具调用，原生流式支持     |
+| TaskAgent      | `agent/taskagent`          | Agent, StreamAgent        | ReAct 式工具调用，原生流式支持     |
 | WorkflowAgent | `agent/workflowagent`     | Agent, StreamAgent        | 编排执行（顺序/DAG/循环）          |
 | RouterAgent   | `agent/routeragent`       | Agent, StreamAgent        | 动态路由分发，基于 RouteFunc       |
 | CustomAgent   | `agent`（主包）           | Agent                     | 委托给用户提供的 RunFunc           |
 
 ---
 
-## 4. LLMAgent（`agent/llmagent`）
+## 4. TaskAgent（`agent/taskagent`）
 
 基于大模型的 ReAct 式 Agent，是框架最核心的 Agent 类型。
 
@@ -126,20 +126,20 @@ type Base struct {
 通过 Functional Options 模式配置：
 
 ```go
-llmagent.New(cfg,
-    llmagent.WithChatCompleter(cc),
-    llmagent.WithSystemPrompt(prompt.StringPrompt("...")),
-    llmagent.WithToolRegistry(registry),
-    llmagent.WithMemory(memMgr),
-    llmagent.WithMaxIterations(20),
-    llmagent.WithRunTokenBudget(4000),
-    llmagent.WithMaxTokens(1024),
-    llmagent.WithTemperature(0.7),
-    llmagent.WithStreamBufferSize(64),
-    llmagent.WithStreamMiddleware(mw1, mw2),
-    llmagent.WithHookManager(hookMgr),
-    llmagent.WithInputGuards(g1),
-    llmagent.WithOutputGuards(g2),
+taskagent.New(cfg,
+    taskagent.WithChatCompleter(cc),
+    taskagent.WithSystemPrompt(prompt.StringPrompt("...")),
+    taskagent.WithToolRegistry(registry),
+    taskagent.WithMemory(memMgr),
+    taskagent.WithMaxIterations(20),
+    taskagent.WithRunTokenBudget(4000),
+    taskagent.WithMaxTokens(1024),
+    taskagent.WithTemperature(0.7),
+    taskagent.WithStreamBufferSize(64),
+    taskagent.WithStreamMiddleware(mw1, mw2),
+    taskagent.WithHookManager(hookMgr),
+    taskagent.WithInputGuards(g1),
+    taskagent.WithOutputGuards(g2),
 )
 ```
 
@@ -200,7 +200,7 @@ llmagent.New(cfg,
 
 ### Token 预算控制
 
-`budgetTracker`（`agent/llmagent/budget.go`）追踪单次 Run 的 Token 消耗：
+`budgetTracker`（`agent/taskagent/budget.go`）追踪单次 Run 的 Token 消耗：
 
 - **Run 模式**：使用 LLM 返回的真实 Usage.TotalTokens
 - **RunStream 模式**：基于流式字节数启发式估算（每 4 字节约 1 token）

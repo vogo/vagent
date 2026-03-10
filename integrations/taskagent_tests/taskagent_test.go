@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package llmagent_tests //nolint:revive // integration test package
+package taskagent_tests //nolint:revive // integration test package
 
 import (
 	"context"
@@ -29,7 +29,7 @@ import (
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/agent/llmagent"
+	"github.com/vogo/vagent/agent/taskagent"
 	"github.com/vogo/vagent/guard"
 	"github.com/vogo/vagent/hook"
 	"github.com/vogo/vagent/largemodel"
@@ -39,7 +39,7 @@ import (
 	"github.com/vogo/vagent/tool"
 )
 
-func TestLLMAgentIntegration(t *testing.T) {
+func TestTaskAgentIntegration(t *testing.T) {
 	// Create aimodel client. Reads AI_API_KEY / AI_BASE_URL / AI_MODEL from env.
 	client, err := aimodel.NewClient(
 		aimodel.WithDefaultModel(aimodel.GetEnv("OPENAI_MODEL")),
@@ -137,20 +137,20 @@ func TestLLMAgentIntegration(t *testing.T) {
 	})
 
 	// Build the LLM agent with guard integration.
-	a := llmagent.New(agent.Config{
+	a := taskagent.New(agent.Config{
 		ID:   "weather-agent",
 		Name: "Weather Assistant",
 	},
-		llmagent.WithChatCompleter(model),
-		llmagent.WithToolRegistry(reg),
-		llmagent.WithSystemPrompt(prompt.StringPrompt(
+		taskagent.WithChatCompleter(model),
+		taskagent.WithToolRegistry(reg),
+		taskagent.WithSystemPrompt(prompt.StringPrompt(
 			"You are a helpful assistant. Use tools to answer questions. Be concise.",
 		)),
-		llmagent.WithMaxIterations(5),
-		llmagent.WithHookManager(hm),
-		llmagent.WithMemory(memoryManager),
-		llmagent.WithInputGuards(injectionGuard, inputPIIGuard, lengthGuard),
-		llmagent.WithOutputGuards(contentFilter, outputPIIGuard),
+		taskagent.WithMaxIterations(5),
+		taskagent.WithHookManager(hm),
+		taskagent.WithMemory(memoryManager),
+		taskagent.WithInputGuards(injectionGuard, inputPIIGuard, lengthGuard),
+		taskagent.WithOutputGuards(contentFilter, outputPIIGuard),
 	)
 
 	// ── Turn 1: normal query (passes all guards) ────────────────────
@@ -204,7 +204,7 @@ func drainStream(rs *schema.RunStream) {
 	}
 }
 
-func runStreaming(a *llmagent.Agent, question string) {
+func runStreaming(a *taskagent.Agent, question string) {
 	rs, err := agent.RunStreamText(context.Background(), a, question)
 	if err != nil {
 		log.Fatal(err)

@@ -244,7 +244,7 @@ type Validator interface {
 - 记录激活状态（Activation）
 - 触发 `EventSkillActivate` 事件（Hook 系统）
 
-LLMAgent 在 Run/RunStream 时自动处理已激活的 Skill：
+TaskAgent 在 Run/RunStream 时自动处理已激活的 Skill：
 - 将 `Instructions` 追加到 Agent 的 SystemPrompt（包裹在 `<skill name="...">` XML 标签内）
 - 根据 `AllowedTools` 过滤可用工具
 
@@ -279,7 +279,7 @@ Agent 在 Skill 指令引导下执行任务：
 ├────────────────┬────────────────┬────────────────┬─────────────────┤
 │   Agent Layer  │  Memory Layer  │  Tool Layer    │  Skill Layer    │
 │  ┌───────────┐ │ ┌────────────┐ │ ┌────────────┐ │ ┌────────────┐ │
-│  │ LLMAgent  │ │ │  Working   │ │ │ Tool Reg.  │ │ │ Registry   │ │
+│  │ TaskAgent  │ │ │  Working   │ │ │ Tool Reg.  │ │ │ Registry   │ │
 │  │ Workflow  │ │ │  Session   │ │ │ Tool Exec. │ │ │ Manager    │ │
 │  │ Router    │ │ │  Store     │ │ │ Built-in   │ │ │ FileLoader │ │
 │  │ Custom    │ │ └────────────┘ │ └────────────┘ │ └────────────┘ │
@@ -291,18 +291,18 @@ Agent 在 Skill 指令引导下执行任务：
 
 ### 6.2 与 Agent 集成
 
-**LLMAgent**：Skill 的核心消费者。通过 `llmagent.WithSkillManager(m)` 配置。
+**TaskAgent**：Skill 的核心消费者。通过 `taskagent.WithSkillManager(m)` 配置。
 
 ```go
-// LLMAgent 通过 Option 注入 skill.Manager
-a := llmagent.New(cfg,
-    llmagent.WithSkillManager(manager),
-    llmagent.WithChatCompleter(cc),
-    llmagent.WithToolRegistry(toolReg),
+// TaskAgent 通过 Option 注入 skill.Manager
+a := taskagent.New(cfg,
+    taskagent.WithSkillManager(manager),
+    taskagent.WithChatCompleter(cc),
+    taskagent.WithToolRegistry(toolReg),
 )
 ```
 
-在 `Run`/`RunStream` 执行时，LLMAgent 自动：
+在 `Run`/`RunStream` 执行时，TaskAgent 自动：
 1. 调用 `injectSkillInstructions`：将所有 active skill 的 Instructions 以 `<skill name="...">` XML 标签形式追加到 SystemPrompt
 2. 调用 `mergeSkillToolFilter`：根据 active skill 的 AllowedTools 过滤工具列表
 
@@ -318,7 +318,7 @@ a := llmagent.New(cfg,
 
 ### 6.3 与 Tool 集成
 
-Skill 通过 `allowed_tools` 声明可使用的工具。LLMAgent 在 Run 时通过 `mergeSkillToolFilter` 方法将 skill 的工具白名单与 request-level filter 合并，最终传入 `prepareAITools` 进行过滤。`prepareAITools` 本身保持纯函数签名 `(filter []string) []aimodel.Tool`，不依赖 session 状态。
+Skill 通过 `allowed_tools` 声明可使用的工具。TaskAgent 在 Run 时通过 `mergeSkillToolFilter` 方法将 skill 的工具白名单与 request-level filter 合并，最终传入 `prepareAITools` 进行过滤。`prepareAITools` 本身保持纯函数签名 `(filter []string) []aimodel.Tool`，不依赖 session 状态。
 
 ### 6.4 与 Memory 集成
 
@@ -418,7 +418,7 @@ vagent/
 │       └── bad-name/         # 命名不合规 Skill（测试 Discover 不做校验）
 ├── schema/
 │   └── event.go              # Skill 相关事件类型和数据结构
-├── agent/llmagent/
+├── agent/taskagent/
 │   └── llm.go                # WithSkillManager、injectSkillInstructions、mergeSkillToolFilter
 ├── service/
 │   └── service.go            # WithSkillDir、WithSkillManager、discoverSkills
@@ -429,12 +429,12 @@ vagent/
 ### 包依赖关系
 
 ```
-agent/llmagent ──→ skill (Manager 接口)
+agent/taskagent ──→ skill (Manager 接口)
 skill ──→ schema (Event 类型)
 service ──→ skill (Registry、Manager、FileLoader)
 ```
 
-> 注意：skill 包不依赖 tool 包。工具过滤逻辑在 agent/llmagent 中实现，skill 包仅声明 AllowedTools 字段。
+> 注意：skill 包不依赖 tool 包。工具过滤逻辑在 agent/taskagent 中实现，skill 包仅声明 AllowedTools 字段。
 
 ---
 
@@ -457,10 +457,10 @@ for _, s := range skills {
 manager := skill.NewManager(registry)
 
 // 4. 创建 Agent 并关联 Skill 管理器
-a := llmagent.New(cfg,
-    llmagent.WithSkillManager(manager),
-    llmagent.WithChatCompleter(cc),
-    llmagent.WithToolRegistry(toolReg),
+a := taskagent.New(cfg,
+    taskagent.WithSkillManager(manager),
+    taskagent.WithChatCompleter(cc),
+    taskagent.WithToolRegistry(toolReg),
 )
 
 // 5. 激活 Skill（在 Run 前或 Run 过程中动态激活）

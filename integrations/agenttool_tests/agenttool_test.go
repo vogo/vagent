@@ -25,14 +25,14 @@ import (
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/agent/llmagent"
+	"github.com/vogo/vagent/agent/taskagent"
 	"github.com/vogo/vagent/largemodel"
 	"github.com/vogo/vagent/prompt"
 	"github.com/vogo/vagent/schema"
 	"github.com/vogo/vagent/tool"
 )
 
-// TestAgentAsToolIntegration verifies that a coordinator LLMAgent can delegate
+// TestAgentAsToolIntegration verifies that a coordinator TaskAgent can delegate
 // work to a sub-agent registered as a tool. The coordinator's LLM should
 // select the sub-agent tool when prompted, and the coordinator's final response
 // should incorporate the sub-agent's output.
@@ -91,19 +91,19 @@ func TestAgentAsToolIntegration(t *testing.T) {
 		),
 	)
 
-	// Build the coordinator LLMAgent with the sub-agent tool.
-	coordinator := llmagent.New(agent.Config{
+	// Build the coordinator TaskAgent with the sub-agent tool.
+	coordinator := taskagent.New(agent.Config{
 		ID:   "coordinator-agent",
 		Name: "Coordinator",
 	},
-		llmagent.WithChatCompleter(model),
-		llmagent.WithToolRegistry(reg),
-		llmagent.WithSystemPrompt(prompt.StringPrompt(
+		taskagent.WithChatCompleter(model),
+		taskagent.WithToolRegistry(reg),
+		taskagent.WithSystemPrompt(prompt.StringPrompt(
 			"You are a helpful assistant. When the user asks you to translate text to French, "+
 				"you MUST use the translate_to_french tool. Pass the text to translate as the 'input' parameter. "+
 				"After receiving the tool result, include the translated text in your response.",
 		)),
-		llmagent.WithMaxIterations(5),
+		taskagent.WithMaxIterations(5),
 	)
 
 	// Send a request that should trigger the coordinator to use the translator tool.

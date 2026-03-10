@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package llmagent
+package taskagent
 
 import (
 	"context"

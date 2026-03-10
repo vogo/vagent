@@ -29,7 +29,7 @@ import (
 
 	"github.com/vogo/aimodel"
 	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/agent/llmagent"
+	"github.com/vogo/vagent/agent/taskagent"
 	"github.com/vogo/vagent/prompt"
 	"github.com/vogo/vagent/schema"
 	"github.com/vogo/vagent/service"
@@ -289,16 +289,16 @@ func TestSkillFullLifecycle(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 2: LLMAgent with Skills (mock ChatCompleter)
+// Test 2: TaskAgent with Skills (mock ChatCompleter)
 //
-// Verifies LLMAgent integration:
+// Verifies TaskAgent integration:
 //   - Skill instructions are injected into the system prompt
 //   - Skill AllowedTools filter the tools sent to the LLM
 //   - Multiple active skills have their instructions merged
 //   - Tool intersection with request-level filter works
 //
 // ---------------------------------------------------------------------------
-func TestSkillLLMAgentIntegration(t *testing.T) {
+func TestSkillTaskAgentIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	// Set up skills.
@@ -329,11 +329,11 @@ func TestSkillLLMAgentIntegration(t *testing.T) {
 
 	cc := &capturingChatCompleter{}
 
-	a := llmagent.New(agent.Config{ID: "skill-test-agent"},
-		llmagent.WithChatCompleter(cc),
-		llmagent.WithToolRegistry(toolReg),
-		llmagent.WithSkillManager(manager),
-		llmagent.WithSystemPrompt(prompt.StringPrompt("Base system prompt.")),
+	a := taskagent.New(agent.Config{ID: "skill-test-agent"},
+		taskagent.WithChatCompleter(cc),
+		taskagent.WithToolRegistry(toolReg),
+		taskagent.WithSkillManager(manager),
+		taskagent.WithSystemPrompt(prompt.StringPrompt("Base system prompt.")),
 	)
 
 	resp, err := a.Run(ctx, &schema.RunRequest{
@@ -388,14 +388,14 @@ func TestSkillLLMAgentIntegration(t *testing.T) {
 	}
 }
 
-// TestSkillLLMAgentMultipleSkills verifies that multiple active skills merge
+// TestSkillTaskAgentMultipleSkills verifies that multiple active skills merge
 // their instructions and tool allowlists.
 //
 //   - Two skills activated for the same session
 //   - Both skill instructions appear in the system prompt
 //   - When all skills declare AllowedTools, union is used; when any skill is
 //     unrestricted (no AllowedTools), all tools pass through.
-func TestSkillLLMAgentMultipleSkills(t *testing.T) {
+func TestSkillTaskAgentMultipleSkills(t *testing.T) {
 	ctx := context.Background()
 
 	registry := skill.NewRegistry(skill.WithValidator(skill.DefaultValidator()))
@@ -427,10 +427,10 @@ func TestSkillLLMAgentMultipleSkills(t *testing.T) {
 	must(t, toolReg.Register(schema.ToolDef{Name: "tool-w", Description: "W"}, noopHandler))
 
 	cc := &capturingChatCompleter{}
-	a := llmagent.New(agent.Config{ID: "multi-skill-agent"},
-		llmagent.WithChatCompleter(cc),
-		llmagent.WithToolRegistry(toolReg),
-		llmagent.WithSkillManager(manager),
+	a := taskagent.New(agent.Config{ID: "multi-skill-agent"},
+		taskagent.WithChatCompleter(cc),
+		taskagent.WithToolRegistry(toolReg),
+		taskagent.WithSkillManager(manager),
 	)
 
 	_, err = a.Run(ctx, &schema.RunRequest{
@@ -494,10 +494,10 @@ func TestSkillNoAllowedToolsPassesAllTools(t *testing.T) {
 	must(t, toolReg.Register(schema.ToolDef{Name: "any-tool", Description: "Any"}, noopHandler))
 
 	cc := &capturingChatCompleter{}
-	a := llmagent.New(agent.Config{ID: "no-tools-agent"},
-		llmagent.WithChatCompleter(cc),
-		llmagent.WithToolRegistry(toolReg),
-		llmagent.WithSkillManager(manager),
+	a := taskagent.New(agent.Config{ID: "no-tools-agent"},
+		taskagent.WithChatCompleter(cc),
+		taskagent.WithToolRegistry(toolReg),
+		taskagent.WithSkillManager(manager),
 	)
 
 	_, err = a.Run(ctx, &schema.RunRequest{
@@ -543,10 +543,10 @@ func TestSkillMixedAllowedToolsPassesAll(t *testing.T) {
 	must(t, toolReg.Register(schema.ToolDef{Name: "tool-b", Description: "B"}, noopHandler))
 
 	cc := &capturingChatCompleter{}
-	a := llmagent.New(agent.Config{ID: "mixed-agent"},
-		llmagent.WithChatCompleter(cc),
-		llmagent.WithToolRegistry(toolReg),
-		llmagent.WithSkillManager(manager),
+	a := taskagent.New(agent.Config{ID: "mixed-agent"},
+		taskagent.WithChatCompleter(cc),
+		taskagent.WithToolRegistry(toolReg),
+		taskagent.WithSkillManager(manager),
 	)
 
 	_, err := a.Run(ctx, &schema.RunRequest{
