@@ -4,6 +4,8 @@ go 1.24.0
 
 require github.com/vogo/aimodel v0.0.0-20260304060950-f09e169d7b5b
 
+require gopkg.in/yaml.v3 v3.0.1
+
 require (
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/modelcontextprotocol/go-sdk v1.4.0

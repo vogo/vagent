@@ -34,6 +34,7 @@ import (
 	"github.com/vogo/vagent/memory"
 	"github.com/vogo/vagent/prompt"
 	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vagent/skill"
 	"github.com/vogo/vagent/tool"
 )
 
@@ -56,6 +57,7 @@ type Agent struct {
 	hookManager      *hook.Manager
 	inputGuards      []guard.Guard
 	outputGuards     []guard.Guard
+	skillManager     skill.Manager
 }
 
 var (
@@ -125,6 +127,11 @@ func WithInputGuards(guards ...guard.Guard) Option {
 // WithOutputGuards sets guards to check agent output before returning to the user.
 func WithOutputGuards(guards ...guard.Guard) Option {
 	return func(a *Agent) { a.outputGuards = guards }
+}
+
+// WithSkillManager sets the skill manager for prompt injection and tool filtering.
+func WithSkillManager(m skill.Manager) Option {
+	return func(a *Agent) { a.skillManager = m }
 }
 
 // New creates a new Agent with the given config and options.
@@ -305,9 +312,108 @@ func (a *Agent) prepareAITools(filter []string) []aimodel.Tool {
 	if a.toolRegistry == nil {
 		return nil
 	}
+
 	defs := a.toolRegistry.List()
 	defs = tool.FilterTools(defs, filter)
 	return tool.ToAIModelTools(defs)
+}
+
+// mergeSkillToolFilter merges skill AllowedTools with the request-level tool filter.
+// If any active skill does not declare AllowedTools (meaning it has no restriction),
+// the result is the requestFilter as-is (no additional filtering).
+// Only when ALL active skills that declare AllowedTools is the union used as a filter.
+func (a *Agent) mergeSkillToolFilter(requestFilter []string, sessionID string) []string {
+	if a.skillManager == nil {
+		return requestFilter
+	}
+
+	active := a.skillManager.ActiveSkills(sessionID)
+	if len(active) == 0 {
+		return requestFilter
+	}
+
+	// Collect union of all skill allowed tools.
+	// If any active skill does NOT declare AllowedTools, it means "unrestricted",
+	// so we skip skill-level filtering entirely.
+	var skillTools []string
+	seen := make(map[string]bool)
+
+	for _, act := range active {
+		def := act.SkillDef()
+		if len(def.AllowedTools) == 0 {
+			// This skill has no tool restriction — don't filter.
+			return requestFilter
+		}
+		for _, t := range def.AllowedTools {
+			if !seen[t] {
+				seen[t] = true
+				skillTools = append(skillTools, t)
+			}
+		}
+	}
+
+	// If no request filter, use skill tools only.
+	if len(requestFilter) == 0 {
+		return skillTools
+	}
+
+	// Intersect skill tools with request filter.
+	reqSet := make(map[string]bool, len(requestFilter))
+	for _, t := range requestFilter {
+		reqSet[t] = true
+	}
+
+	var result []string
+	for _, t := range skillTools {
+		if reqSet[t] {
+			result = append(result, t)
+		}
+	}
+
+	return result
+}
+
+// injectSkillInstructions appends active skill instructions to the system prompt.
+func (a *Agent) injectSkillInstructions(br *buildResult, sessionID string) {
+	if a.skillManager == nil {
+		return
+	}
+
+	active := a.skillManager.ActiveSkills(sessionID)
+	if len(active) == 0 {
+		return
+	}
+
+	var sb strings.Builder
+	for _, act := range active {
+		def := act.SkillDef()
+		if def.Instructions == "" {
+			continue
+		}
+		sb.WriteString("\n<skill name=\"")
+		sb.WriteString(act.SkillName)
+		sb.WriteString("\">\n")
+		sb.WriteString(def.Instructions)
+		sb.WriteString("\n</skill>")
+	}
+
+	if sb.Len() == 0 {
+		return
+	}
+
+	skillText := sb.String()
+
+	// If there is a system message, append to it; otherwise prepend a new system message.
+	if len(br.messages) > 0 && br.messages[0].Role == aimodel.RoleSystem {
+		existing := br.messages[0].Content.Text()
+		br.messages[0].Content = aimodel.NewTextContent(existing + skillText)
+	} else {
+		sysMsg := aimodel.Message{
+			Role:    aimodel.RoleSystem,
+			Content: aimodel.NewTextContent(skillText),
+		}
+		br.messages = append([]aimodel.Message{sysMsg}, br.messages...)
+	}
 }
 
 // executeToolCall runs a single tool call and returns the result.
@@ -553,8 +659,10 @@ func (a *Agent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunRes
 	}
 
 	rc.br = br
-	messages := br.messages
-	aiTools := a.prepareAITools(p.toolFilter)
+	// Inject skill instructions into the system prompt.
+	a.injectSkillInstructions(&rc.br, rc.sessionID)
+	messages := rc.br.messages
+	aiTools := a.prepareAITools(a.mergeSkillToolFilter(p.toolFilter, rc.sessionID))
 
 	for iter := 0; iter < p.maxIter; iter++ {
 		rc.iteration = iter
@@ -699,7 +807,10 @@ func (a *Agent) RunStream(ctx context.Context, req *schema.RunRequest) (*schema.
 		return nil, err
 	}
 
-	aiTools := a.prepareAITools(p.toolFilter)
+	// Inject skill instructions into the system prompt.
+	a.injectSkillInstructions(&br, req.SessionID)
+
+	aiTools := a.prepareAITools(a.mergeSkillToolFilter(p.toolFilter, req.SessionID))
 
 	return schema.NewRunStream(ctx, a.streamBufferSize, func(ctx context.Context, rawSend func(schema.Event) error) error {
 		send := a.buildSend(ctx, rawSend)

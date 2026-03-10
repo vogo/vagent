@@ -34,6 +34,7 @@ import (
 	"github.com/vogo/vagent/memory"
 	"github.com/vogo/vagent/prompt"
 	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vagent/skill"
 	"github.com/vogo/vagent/tool"
 )
 
@@ -1122,5 +1123,234 @@ func TestRunToStream(t *testing.T) {
 	endData := events[1].Data.(schema.AgentEndData)
 	if endData.Message != "hello" {
 		t.Errorf("AgentEnd message = %q, want %q", endData.Message, "hello")
+	}
+}
+
+// --- Skill integration tests ---
+
+func setupSkillManager(t *testing.T) skill.Manager {
+	t.Helper()
+	reg := skill.NewRegistry()
+	_ = reg.Register(&skill.Def{
+		Name:         "test-skill",
+		Description:  "A test skill",
+		Instructions: "You must always respond in JSON format.",
+		AllowedTools: []string{"allowed"},
+	})
+	_ = reg.Register(&skill.Def{
+		Name:         "other-skill",
+		Description:  "Another skill",
+		Instructions: "Be concise.",
+	})
+	return skill.NewManager(reg)
+}
+
+func TestAgent_Run_WithSkillManager_PromptInjection(t *testing.T) {
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
+	mgr := setupSkillManager(t)
+	ctx := context.Background()
+
+	_, _ = mgr.Activate(ctx, "test-skill", "sess-1")
+
+	a := New(agent.Config{},
+		WithChatCompleter(mock),
+		WithSystemPrompt(prompt.StringPrompt("You are helpful.")),
+		WithSkillManager(mgr),
+	)
+
+	_, err := a.Run(ctx, &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("hi")},
+		SessionID: "sess-1",
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	req := mock.requests[0]
+	sysContent := req.Messages[0].Content.Text()
+	if !strings.Contains(sysContent, "You are helpful.") {
+		t.Error("system prompt should contain original text")
+	}
+	if !strings.Contains(sysContent, `<skill name="test-skill">`) {
+		t.Error("system prompt should contain skill tag")
+	}
+	if !strings.Contains(sysContent, "You must always respond in JSON format.") {
+		t.Error("system prompt should contain skill instructions")
+	}
+}
+
+func TestAgent_Run_WithSkillManager_NoActiveSkills(t *testing.T) {
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
+	mgr := setupSkillManager(t)
+
+	a := New(agent.Config{},
+		WithChatCompleter(mock),
+		WithSystemPrompt(prompt.StringPrompt("You are helpful.")),
+		WithSkillManager(mgr),
+	)
+
+	_, err := a.Run(context.Background(), &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("hi")},
+		SessionID: "sess-no-skills",
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	req := mock.requests[0]
+	sysContent := req.Messages[0].Content.Text()
+	if strings.Contains(sysContent, "<skill") {
+		t.Error("system prompt should not contain skill tags when no skills are active")
+	}
+}
+
+func TestAgent_Run_WithSkillManager_ToolFiltering(t *testing.T) {
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
+	mgr := setupSkillManager(t)
+	ctx := context.Background()
+
+	_, _ = mgr.Activate(ctx, "test-skill", "sess-1")
+
+	reg := tool.NewRegistry()
+	_ = reg.Register(schema.ToolDef{Name: "allowed"}, echoToolHandler)
+	_ = reg.Register(schema.ToolDef{Name: "blocked"}, echoToolHandler)
+
+	a := New(agent.Config{},
+		WithChatCompleter(mock),
+		WithToolRegistry(reg),
+		WithSkillManager(mgr),
+	)
+
+	_, err := a.Run(ctx, &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("hi")},
+		SessionID: "sess-1",
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	req := mock.requests[0]
+	if len(req.Tools) != 1 {
+		t.Fatalf("Tools length = %d, want 1", len(req.Tools))
+	}
+	if req.Tools[0].Function.Name != "allowed" {
+		t.Errorf("Tools[0].Name = %q, want %q", req.Tools[0].Function.Name, "allowed")
+	}
+}
+
+func TestAgent_Run_WithSkillManager_ToolFilterIntersection(t *testing.T) {
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
+	mgr := setupSkillManager(t)
+	ctx := context.Background()
+
+	_, _ = mgr.Activate(ctx, "test-skill", "sess-1") // AllowedTools: ["allowed"]
+
+	reg := tool.NewRegistry()
+	_ = reg.Register(schema.ToolDef{Name: "allowed"}, echoToolHandler)
+	_ = reg.Register(schema.ToolDef{Name: "other"}, echoToolHandler)
+
+	a := New(agent.Config{},
+		WithChatCompleter(mock),
+		WithToolRegistry(reg),
+		WithSkillManager(mgr),
+	)
+
+	// Request filter includes "allowed" and "other", skill only allows "allowed".
+	_, err := a.Run(ctx, &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("hi")},
+		SessionID: "sess-1",
+		Options:   &schema.RunOptions{Tools: []string{"allowed", "other"}},
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	req := mock.requests[0]
+	if len(req.Tools) != 1 {
+		t.Fatalf("Tools length = %d, want 1", len(req.Tools))
+	}
+	if req.Tools[0].Function.Name != "allowed" {
+		t.Errorf("Tools[0].Name = %q, want %q", req.Tools[0].Function.Name, "allowed")
+	}
+}
+
+func TestAgent_Run_WithSkillManager_MultipleActiveSkills(t *testing.T) {
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
+	mgr := setupSkillManager(t)
+	ctx := context.Background()
+
+	_, _ = mgr.Activate(ctx, "test-skill", "sess-1")
+	_, _ = mgr.Activate(ctx, "other-skill", "sess-1")
+
+	reg := tool.NewRegistry()
+	_ = reg.Register(schema.ToolDef{Name: "allowed"}, echoToolHandler)
+	_ = reg.Register(schema.ToolDef{Name: "blocked"}, echoToolHandler)
+
+	a := New(agent.Config{},
+		WithChatCompleter(mock),
+		WithSystemPrompt(prompt.StringPrompt("Base prompt.")),
+		WithToolRegistry(reg),
+		WithSkillManager(mgr),
+	)
+
+	_, err := a.Run(ctx, &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("hi")},
+		SessionID: "sess-1",
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	req := mock.requests[0]
+	sysContent := req.Messages[0].Content.Text()
+
+	// Both skill instructions should be injected.
+	if !strings.Contains(sysContent, `<skill name="test-skill">`) {
+		t.Error("system prompt should contain test-skill tag")
+	}
+	if !strings.Contains(sysContent, `<skill name="other-skill">`) {
+		t.Error("system prompt should contain other-skill tag")
+	}
+	if !strings.Contains(sysContent, "You must always respond in JSON format.") {
+		t.Error("system prompt should contain test-skill instructions")
+	}
+	if !strings.Contains(sysContent, "Be concise.") {
+		t.Error("system prompt should contain other-skill instructions")
+	}
+
+	// Tool filter: test-skill has AllowedTools=["allowed"], other-skill has none (unrestricted).
+	// Since other-skill is unrestricted, all tools should pass through.
+	if len(req.Tools) != 2 {
+		t.Fatalf("Tools length = %d, want 2", len(req.Tools))
+	}
+}
+
+func TestAgent_Run_WithSkillManager_NoSystemPrompt(t *testing.T) {
+	mock := &mockChatCompleter{responses: []*aimodel.ChatResponse{stopResponse("ok")}}
+	mgr := setupSkillManager(t)
+	ctx := context.Background()
+
+	_, _ = mgr.Activate(ctx, "test-skill", "sess-1")
+
+	a := New(agent.Config{},
+		WithChatCompleter(mock),
+		WithSkillManager(mgr),
+	)
+
+	_, err := a.Run(ctx, &schema.RunRequest{
+		Messages:  []schema.Message{schema.NewUserMessage("hi")},
+		SessionID: "sess-1",
+	})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+
+	req := mock.requests[0]
+	// Should have a system message injected for the skill.
+	if req.Messages[0].Role != aimodel.RoleSystem {
+		t.Errorf("Messages[0].Role = %q, want %q", req.Messages[0].Role, aimodel.RoleSystem)
+	}
+	if !strings.Contains(req.Messages[0].Content.Text(), `<skill name="test-skill">`) {
+		t.Error("system message should contain skill instructions")
 	}
 }

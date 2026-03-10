@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package agenttool //nolint:revive // integration test package
+package agenttool_tests
 
 import (
 	"context"

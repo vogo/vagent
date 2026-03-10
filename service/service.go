@@ -21,12 +21,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
 	"net"
 	"net/http"
 	"sort"
 	"sync"
 
 	"github.com/vogo/vagent/agent"
+	"github.com/vogo/vagent/skill"
 	"github.com/vogo/vagent/tool"
 )
 
@@ -80,6 +82,16 @@ func WithHeartbeatInterval(seconds int) Option {
 	}
 }
 
+// WithSkillDir sets the directory to scan for skill definitions at startup.
+func WithSkillDir(dir string) Option {
+	return func(s *Service) { s.skillDir = dir }
+}
+
+// WithSkillManager sets the skill manager used by the service.
+func WithSkillManager(m skill.Manager) Option {
+	return func(s *Service) { s.skillManager = m }
+}
+
 // ErrorResponse is the standard error response body.
 type ErrorResponse struct {
 	Code    string `json:"code"`
@@ -98,6 +110,9 @@ type Service struct {
 	ln             net.Listener
 	maxRequestSize int64
 	heartbeatSec   int
+	skillDir       string
+	skillRegistry  skill.Registry
+	skillManager   skill.Manager
 }
 
 // New creates a new Service with the given configuration and options.
@@ -159,9 +174,51 @@ func (s *Service) Handler() http.Handler {
 	return s.buildMux()
 }
 
+// SkillManager returns the service's skill manager, if configured.
+func (s *Service) SkillManager() skill.Manager {
+	return s.skillManager
+}
+
+// discoverSkills loads and registers skills from the configured skill directory.
+// When WithSkillManager is already set, discoverSkills is skipped to avoid
+// inconsistent state between the external manager and an internally created registry.
+func (s *Service) discoverSkills(ctx context.Context) {
+	if s.skillDir == "" {
+		return
+	}
+
+	if s.skillManager != nil {
+		slog.Warn("service: WithSkillManager and WithSkillDir are both set; skipping auto-discovery")
+		return
+	}
+
+	loader := &skill.FileLoader{}
+	skills, err := loader.Discover(ctx, s.skillDir)
+	if err != nil {
+		slog.Warn("service: skill discovery failed", "dir", s.skillDir, "error", err)
+		return
+	}
+
+	if s.skillRegistry == nil {
+		s.skillRegistry = skill.NewRegistry(skill.WithValidator(skill.DefaultValidator()))
+	}
+
+	s.skillManager = skill.NewManager(s.skillRegistry)
+
+	for _, def := range skills {
+		if regErr := s.skillRegistry.Register(def); regErr != nil {
+			slog.Warn("service: skill register failed", "name", def.Name, "error", regErr)
+		}
+	}
+
+	slog.Info("service: skills discovered", "dir", s.skillDir, "count", len(skills))
+}
+
 // Start begins listening and serving HTTP requests.
 // It blocks until the context is canceled or an error occurs.
 func (s *Service) Start(ctx context.Context) error {
+	s.discoverSkills(ctx)
+
 	mux := s.buildMux()
 
 	s.server = &http.Server{

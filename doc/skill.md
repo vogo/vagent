@@ -17,7 +17,7 @@ Agent Skills 是 Anthropic 于 2025 年 10 月提出、2025 年 12 月捐赠给 
 | 可靠性     | 确定性输入输出 Schema      | 取决于模型对指令的理解和遵循             |
 | 加载方式   | 注册后常驻                 | 按需激活，渐进式披露                     |
 
-**核心洞察**：Skill 与 Tool 正交——Skill 在 Prompt/上下文层面操作，Tool 在执行层面操作。Skill 可以声明它需要使用哪些 Tool（通过 `allowed-tools`），但 Skill 本身是塑造 Agent 行为的指令，Tool 是执行原语。
+**核心洞察**：Skill 与 Tool 正交——Skill 在 Prompt/上下文层面操作，Tool 在执行层面操作。Skill 可以声明它需要使用哪些 Tool（通过 `allowed_tools`），但 Skill 本身是塑造 Agent 行为的指令，Tool 是执行原语。
 
 ### 1.3 设计目标
 
@@ -48,7 +48,7 @@ my-skill/
 name: pdf-processing
 description: Process and analyze PDF documents
 license: Apache-2.0
-allowed-tools:
+allowed_tools:
   - bash
   - read_file
 metadata:
@@ -74,18 +74,19 @@ metadata:
 
 ## 3. 核心模型
 
-### 3.1 SkillDef — Skill 定义
+### 3.1 Def — Skill 定义
 
 ```go
-// SkillDef describes a skill that can be discovered, registered and activated.
-type SkillDef struct {
+// Def describes a skill that can be discovered, registered and activated.
+type Def struct {
     Name         string            `json:"name"`
     Description  string            `json:"description"`
     License      string            `json:"license,omitempty"`
     AllowedTools []string          `json:"allowed_tools,omitempty"`
     Metadata     map[string]string `json:"metadata,omitempty"`
-    Instructions string            `json:"instructions"`      // SKILL.md 正文
+    Instructions string            `json:"instructions"`        // SKILL.md 正文
     BasePath     string            `json:"base_path,omitempty"` // Skill 目录路径
+    Resources    []Resource        `json:"resources,omitempty"` // 关联资源列表
 }
 ```
 
@@ -94,93 +95,120 @@ type SkillDef struct {
 | Name           | string              | Skill 唯一标识（小写+连字符）          |
 | Description    | string              | Skill 功能描述，用于匹配和展示         |
 | License        | string              | 许可证类型                             |
-| AllowedTools   | []string            | 允许使用的工具白名单                   |
+| AllowedTools   | []string            | 允许使用的工具白名单（空表示不限制）   |
 | Metadata       | map[string]string   | 扩展元数据（author、version 等）       |
 | Instructions   | string              | 解析后的 Markdown 指令正文             |
 | BasePath       | string              | Skill 目录根路径，用于定位 scripts/references/assets |
+| Resources      | []Resource          | 扫描发现的资源文件列表                 |
 
-### 3.2 SkillResource — 资源引用
+### 3.2 Resource — 资源引用
 
 ```go
-// SkillResource represents a loadable resource within a skill.
-type SkillResource struct {
+// Resource represents a loadable resource within a skill.
+type Resource struct {
     Type    string `json:"type"` // "script", "reference", "asset"
     Name    string `json:"name"`
     Path    string `json:"path"`
-    Content string `json:"content,omitempty"` // 懒加载，激活后填充
+    Content string `json:"content,omitempty"` // LoadResource 时填充
 }
 ```
 
-### 3.3 SkillActivation — 激活状态
+### 3.3 Activation — 激活状态
 
 ```go
-// SkillActivation tracks the activation state of a skill within a session.
-type SkillActivation struct {
+// Activation tracks the activation state of a skill within a session.
+type Activation struct {
     SkillName   string
     SessionID   string
     ActivatedAt time.Time
-    Resources   []SkillResource // 已加载的资源
+    def         *Def // unexported，防止外部修改 registry 中的原始数据
 }
+
+// SkillDef returns a copy of the skill definition.
+func (a *Activation) SkillDef() Def
 ```
+
+**设计要点**：`def` 字段为 unexported，`Activate` 时对 registry 中的 `*Def` 做值拷贝存储，通过 `SkillDef()` 方法返回副本，防止外部代码修改 registry 中的原始数据，保证线程安全。
 
 ---
 
 ## 4. 核心接口
 
-### 4.1 SkillLoader — 加载器
+### 4.1 Loader — 加载器
 
 ```go
-// SkillLoader discovers and loads skill definitions from a source.
-type SkillLoader interface {
-    // Load loads a single skill from the given path.
-    Load(path string) (*SkillDef, error)
-    // Discover scans a directory for skills and returns their definitions.
-    Discover(dir string) ([]*SkillDef, error)
+// Loader discovers and loads skill definitions from the filesystem.
+type Loader interface {
+    Load(ctx context.Context, path string) (*Def, error)
+    Discover(ctx context.Context, dir string) ([]*Def, error)
 }
 ```
 
-**实现**：`FileSkillLoader` — 从文件系统加载，解析 SKILL.md 的 YAML frontmatter 和 Markdown 正文。
+**实现**：`FileLoader` — 从文件系统加载，解析 SKILL.md 的 YAML frontmatter 和 Markdown 正文，自动扫描 scripts/、references/、assets/ 子目录中的资源文件。
 
-### 4.2 SkillRegistry — 注册表
+### 4.2 Registry — 注册表
 
 ```go
-// SkillRegistry manages skill definitions and their lifecycle.
-type SkillRegistry interface {
-    // Register adds a skill definition to the registry.
-    Register(def *SkillDef) error
-    // Unregister removes a skill from the registry.
-    Unregister(name string) error
-    // Get returns a skill definition by name.
-    Get(name string) (*SkillDef, bool)
-    // List returns all registered skill definitions.
-    List() []*SkillDef
-    // Match returns skills whose description matches the query (for dynamic activation).
-    Match(query string) []*SkillDef
+// Registry manages registered skill definitions.
+type Registry interface {
+    Register(def *Def) error
+    Unregister(name string)
+    Get(name string) (*Def, bool)
+    List() []*Def
+    Match(query string) []*Def
 }
 ```
 
-### 4.3 SkillManager — 管理器
+**实现**：`InMemoryRegistry` — 线程安全的内存注册表，通过 `WithValidator(v Validator)` 选项配置注册时的校验器。
+
+- `Register`：校验 def 非 nil、通过 Validator 校验、检查名称唯一性
+- `Unregister`：静默移除，不存在时不报错
+- `Match`：按查询词对 Name + Description 做 AND 语义的模糊匹配（大小写无关）
+
+### 4.3 Manager — 管理器
 
 ```go
-// SkillManager orchestrates skill activation and deactivation within agent runs.
-type SkillManager interface {
-    // Activate loads a skill's instructions into the agent's context.
-    Activate(ctx context.Context, name string, sessionID string) (*SkillActivation, error)
-    // Deactivate removes a skill's context from the session.
+// Manager manages skill activations per session.
+type Manager interface {
+    Activate(ctx context.Context, name string, sessionID string) (*Activation, error)
     Deactivate(ctx context.Context, name string, sessionID string) error
-    // ActiveSkills returns currently active skills for a session.
-    ActiveSkills(sessionID string) []*SkillActivation
-    // LoadResource lazily loads a script/reference/asset from an active skill.
-    LoadResource(ctx context.Context, name string, resourceType string, resourceName string) (*SkillResource, error)
+    ActiveSkills(sessionID string) []*Activation
+    ClearSession(ctx context.Context, sessionID string)
+    LoadResource(ctx context.Context, sessionID string, skillName string,
+        resourceType string, resourceName string) (*Resource, error)
 }
 ```
+
+**实现**：`InMemoryManager` — 线程安全的内存管理器。
+
+- `Activate`：从 registry 获取 Def 并做值拷贝，检查重复激活，dispatch `EventSkillActivate` 事件
+- `Deactivate`：从激活列表移除，dispatch `EventSkillDeactivate` 事件
+- `ClearSession`：一次性清除会话的所有激活，逐个 dispatch deactivate 事件，解决会话结束时的内存泄漏问题
+- `LoadResource`：从磁盘读取资源文件内容（无缓存，每次直接读取），dispatch `EventSkillResourceLoad` 事件
+- 通过 `WithEventDispatcher(d EventDispatcher)` 选项配置事件回调
+
+### 4.4 Validator — 校验器
+
+```go
+// Validator validates a Def before registration.
+type Validator interface {
+    Validate(def *Def) error
+}
+```
+
+**内建校验器**（均含 nil 防御检查）：
+- `NameValidator`：命名规范校验（小写字母+数字+连字符，正则 `^[a-z0-9]+(-[a-z0-9]+)*$`）
+- `SizeValidator`：指令长度限制（最大 500 行）
+- `StructureValidator`：目录结构合规（仅允许 scripts/、references/、assets/、SKILL.md）
+- `CompositeValidator`：链式组合多个校验器，返回第一个错误
+- `DefaultValidator()`：返回 NameValidator + SizeValidator + StructureValidator 组合
 
 ---
 
 ## 5. Skill 生命周期
 
 ```
-发现 ──→ 注册 ──→ 验证 ──→ 激活 ──→ 执行 ──→ 卸载
+发现 ──→ 注册 ──→ 验证 ──→ 激活 ──→ 执行 ──→ 卸载/清理
                     │                   │
                     │ frontmatter 校验   │ 指令注入 SystemPrompt
                     │ 工具白名单验证     │ 脚本/资源按需加载
@@ -189,49 +217,51 @@ type SkillManager interface {
 
 ### 5.1 发现 (Discovery)
 
-`SkillLoader.Discover(dir)` 扫描指定目录，查找包含 `SKILL.md` 的子目录。支持：
+`Loader.Discover(ctx, dir)` 扫描指定目录，查找包含 `SKILL.md` 的子目录。支持：
 - 本地文件系统目录扫描
 - 项目内 `.skills/` 约定目录
 - 可扩展支持远程仓库（未来）
 
 ### 5.2 注册 (Registration)
 
-`SkillRegistry.Register(def)` 将 SkillDef 加入注册表：
-- 校验 `name` 和 `description` 必填
-- 校验命名规范（小写字母、数字、连字符）
+`Registry.Register(def)` 将 Def 加入注册表：
+- 校验 def 非 nil
+- 通过 Validator 链校验（如已配置）
 - 检查名称唯一性，防止冲突
 
 ### 5.3 验证 (Validation)
 
-注册时执行验证：
+注册时通过 Validator 链执行验证：
 - Frontmatter 必填字段完整性
-- `allowed-tools` 中的工具是否在 ToolRegistry 中存在
 - SKILL.md 行数是否超过 500 行限制
 - 目录结构合规性（scripts/、references/、assets/ 规范）
 
 ### 5.4 激活 (Activation)
 
-`SkillManager.Activate()` 将 Skill 指令注入 Agent 上下文：
-- 将 `Instructions` 追加到 Agent 的 SystemPrompt
-- 记录激活状态（SkillActivation）
-- 触发 `SkillActivate` 事件（Hook 系统）
-- 限制 Agent 仅使用 `allowed-tools` 中声明的工具
+`Manager.Activate()` 将 Skill 注入 Agent 上下文：
+- 从 registry 获取 Def 并做值拷贝（防止外部修改）
+- 检查重复激活（同一 session 同一 skill 不可重复激活）
+- 记录激活状态（Activation）
+- 触发 `EventSkillActivate` 事件（Hook 系统）
+
+LLMAgent 在 Run/RunStream 时自动处理已激活的 Skill：
+- 将 `Instructions` 追加到 Agent 的 SystemPrompt（包裹在 `<skill name="...">` XML 标签内）
+- 根据 `AllowedTools` 过滤可用工具
 
 ### 5.5 执行 (Execution)
 
 Agent 在 Skill 指令引导下执行任务：
 - 按指令步骤操作
-- 按需加载 scripts/references/assets（`LoadResource`）
-- 脚本通过沙箱环境执行
+- 按需加载 scripts/references/assets（`LoadResource`，每次从磁盘读取）
 - Guard 检查 Skill 上下文中的输入输出
 
 ### 5.6 卸载 (Deactivation)
 
 任务完成后释放 Skill 上下文：
-- 从 SystemPrompt 中移除 Skill 指令
-- 清理已加载的资源
-- 触发 `SkillDeactivate` 事件
-- 释放上下文窗口空间
+- `Deactivate`：从 session 激活列表中移除单个 Skill
+- `ClearSession`：清除 session 的所有 Skill 激活，防止会话结束时的内存泄漏
+- 触发 `EventSkillDeactivate` 事件
+- 下次 Run 时 SystemPrompt 不再包含已卸载 Skill 的指令
 
 ---
 
@@ -249,9 +279,9 @@ Agent 在 Skill 指令引导下执行任务：
 ├────────────────┬────────────────┬────────────────┬─────────────────┤
 │   Agent Layer  │  Memory Layer  │  Tool Layer    │  Skill Layer    │
 │  ┌───────────┐ │ ┌────────────┐ │ ┌────────────┐ │ ┌────────────┐ │
-│  │ LLMAgent  │ │ │  Working   │ │ │ Tool Reg.  │ │ │ Skill Reg. │ │
-│  │ Workflow  │ │ │  Session   │ │ │ Tool Exec. │ │ │ Skill Mgr. │ │
-│  │ Router    │ │ │  Store     │ │ │ Built-in   │ │ │ Skill Load │ │
+│  │ LLMAgent  │ │ │  Working   │ │ │ Tool Reg.  │ │ │ Registry   │ │
+│  │ Workflow  │ │ │  Session   │ │ │ Tool Exec. │ │ │ Manager    │ │
+│  │ Router    │ │ │  Store     │ │ │ Built-in   │ │ │ FileLoader │ │
 │  │ Custom    │ │ └────────────┘ │ └────────────┘ │ └────────────┘ │
 │  └───────────┘ │                │                │                 │
 ├────────────────┴────────────────┴────────────────┴─────────────────┤
@@ -261,44 +291,34 @@ Agent 在 Skill 指令引导下执行任务：
 
 ### 6.2 与 Agent 集成
 
-**LLMAgent**：Skill 的核心消费者。激活 Skill 时将指令注入 SystemPrompt，影响 LLM 的推理行为。
+**LLMAgent**：Skill 的核心消费者。通过 `llmagent.WithSkillManager(m)` 配置。
 
 ```go
-// LLMAgent 扩展
-type LLMAgent struct {
-    // ... 现有字段 ...
-    skillManager  SkillManager  // Skill 管理器
-    activeSkills  []string      // 当前激活的 Skill 名称列表
-}
+// LLMAgent 通过 Option 注入 skill.Manager
+a := llmagent.New(cfg,
+    llmagent.WithSkillManager(manager),
+    llmagent.WithChatCompleter(cc),
+    llmagent.WithToolRegistry(toolReg),
+)
 ```
 
-**RouterAgent**：可根据 Skill 匹配结果路由请求。RouteFunc 可参考 SkillRegistry.Match() 选择最合适的 Agent + Skill 组合。
+在 `Run`/`RunStream` 执行时，LLMAgent 自动：
+1. 调用 `injectSkillInstructions`：将所有 active skill 的 Instructions 以 `<skill name="...">` XML 标签形式追加到 SystemPrompt
+2. 调用 `mergeSkillToolFilter`：根据 active skill 的 AllowedTools 过滤工具列表
+
+**工具过滤语义**：
+- 所有 active skill 均未声明 AllowedTools → 不过滤，传递所有工具
+- **任一** active skill 未声明 AllowedTools（表示无限制）→ 不过滤，传递所有工具
+- 所有 active skill 均声明了 AllowedTools → 取所有 skill 的 AllowedTools 并集
+- 若存在 request-level toolFilter → 与 skill 并集做交集
+
+**RouterAgent**：可根据 Skill 匹配结果路由请求。RouteFunc 可参考 Registry.Match() 选择最合适的 Agent + Skill 组合。
 
 **WorkflowAgent**：DAG 节点可在不同步骤激活/卸载不同 Skill，实现渐进式专家切换。
 
 ### 6.3 与 Tool 集成
 
-Skill 通过 `allowed-tools` 声明可使用的工具。激活 Skill 时：
-
-1. 从 ToolRegistry 中筛选 `allowed-tools` 列表中的工具
-2. 仅将这些工具暴露给当前 Agent 迭代
-3. 未在白名单中的工具调用被拒绝
-
-```go
-// SkillToolFilter 根据激活的 Skill 过滤可用工具
-func SkillToolFilter(registry ToolRegistry, activation *SkillActivation) []ToolDef {
-    if len(activation.AllowedTools) == 0 {
-        return registry.List() // 无限制
-    }
-    var filtered []ToolDef
-    for _, name := range activation.AllowedTools {
-        if def, ok := registry.Get(name); ok {
-            filtered = append(filtered, def)
-        }
-    }
-    return filtered
-}
-```
+Skill 通过 `allowed_tools` 声明可使用的工具。LLMAgent 在 Run 时通过 `mergeSkillToolFilter` 方法将 skill 的工具白名单与 request-level filter 合并，最终传入 `prepareAITools` 进行过滤。`prepareAITools` 本身保持纯函数签名 `(filter []string) []aimodel.Tool`，不依赖 session 状态。
 
 ### 6.4 与 Memory 集成
 
@@ -311,18 +331,27 @@ func SkillToolFilter(registry ToolRegistry, activation *SkillActivation) []ToolD
 Skill 输入输出同样经过 Guard 检查链：
 - InputGuard：检查 Skill 激活请求的合法性
 - OutputGuard：检查 Skill 引导下生成内容的安全性
-- 新增 `SkillGuard`：验证 Skill 来源可信度、目录结构合规性
+- 可通过 StructureValidator 验证 Skill 目录结构合规性
 
 ### 6.6 与 Hook 集成
 
-新增事件类型：
+通过 `EventDispatcher` 回调函数派发事件（避免 skill 包直接依赖 hook 包）：
 
-| 事件类型             | 说明                  | 数据                              |
-| -------------------- | --------------------- | --------------------------------- |
-| `SkillDiscover`      | Skill 发现            | 目录路径、发现数量                |
-| `SkillActivate`      | Skill 激活            | SkillName、SessionID、Timestamp   |
-| `SkillDeactivate`    | Skill 卸载            | SkillName、SessionID、Duration    |
-| `SkillResourceLoad`  | 资源按需加载          | SkillName、ResourceType、ResourceName |
+| 事件类型               | 说明                  | 数据                              |
+| ---------------------- | --------------------- | --------------------------------- |
+| `skill_discover`       | Skill 发现            | 目录路径、发现数量                |
+| `skill_activate`       | Skill 激活            | SkillName、SessionID              |
+| `skill_deactivate`     | Skill 卸载            | SkillName、SessionID              |
+| `skill_resource_load`  | 资源按需加载          | SkillName、ResourceType、ResourceName |
+
+### 6.7 与 Service 集成
+
+Service 通过两种方式配置 Skill 系统：
+
+- `service.WithSkillDir(dir)` — 在 `Start` 时自动发现并注册目录下的 Skill，内部创建 Registry 和 Manager
+- `service.WithSkillManager(m)` — 直接注入外部创建的 Manager
+
+**互斥约束**：若同时设置 `WithSkillManager` 和 `WithSkillDir`，`discoverSkills` 会跳过自动发现，避免外部 Manager 与内部 Registry 不一致。
 
 ---
 
@@ -335,32 +364,32 @@ Skill 输入输出同样经过 Guard 检查链：
 | 威胁               | 风险等级 | 缓解措施                             |
 | ------------------ | -------- | ------------------------------------ |
 | 恶意 Skill 注入    | 高       | 来源验证、签名校验                   |
-| 工具越权调用       | 高       | allowed-tools 白名单强制执行         |
+| 工具越权调用       | 高       | allowed_tools 白名单强制执行         |
 | 文件系统逃逸       | 高       | 沙箱执行、路径限制、符号链接防护     |
 | Prompt 注入        | 中       | 现有 PromptInjectionGuard 覆盖       |
 | 上下文窗口耗尽     | 中       | 500 行限制、上下文压缩器管理         |
 | 网络外联           | 中       | 脚本网络访问控制                     |
 | 配置篡改           | 中       | 禁止 Skill 修改 Hook、配置、其他 Skill |
+| Registry 数据篡改  | 中       | Activation 存储 Def 副本，unexported 字段 |
 
 ### 7.2 安全控制
 
 ```go
-// SkillValidator validates skill definitions before registration.
-type SkillValidator interface {
-    Validate(def *SkillDef) error
+// Validator validates skill definitions before registration.
+type Validator interface {
+    Validate(def *Def) error
 }
 ```
 
-**内建校验器**：
+**内建校验器**（均含 nil 防御检查）：
 - `NameValidator`：命名规范校验
-- `ToolWhitelistValidator`：工具白名单合法性
-- `SizeValidator`：指令长度限制
-- `StructureValidator`：目录结构合规
-- `SignatureValidator`：来源签名验证（可选）
+- `SizeValidator`：指令长度限制（MaxInstructionLines = 500）
+- `StructureValidator`：目录结构合规（仅允许 scripts/、references/、assets/、SKILL.md）
+- `CompositeValidator`：链式组合，`DefaultValidator()` 返回以上三者的组合
 
 ### 7.3 脚本沙箱
 
-Skill 脚本执行通过沙箱环境隔离：
+Skill 脚本执行通过沙箱环境隔离（未来扩展）：
 - 限制文件系统访问范围（仅 Skill 目录和工作目录）
 - 限制网络访问（可配置）
 - 执行超时控制
@@ -372,26 +401,40 @@ Skill 脚本执行通过沙箱环境隔离：
 
 ```
 vagent/
-├── skill/                # Skill 系统
-│   ├── skill.go          # SkillDef、SkillResource、SkillActivation 模型定义
-│   ├── loader.go         # SkillLoader 接口与 FileSkillLoader 实现
-│   ├── registry.go       # SkillRegistry 接口与内存实现
-│   ├── manager.go        # SkillManager 接口与实现
-│   ├── validator.go      # SkillValidator 接口与内建校验器
-│   ├── sandbox.go        # 脚本沙箱执行
-│   └── loader_test.go    # 单元测试
-└── schema/
-    └── event.go          # 新增 Skill 相关事件类型
+├── skill/                    # Skill 系统
+│   ├── skill.go              # Def、Resource、Activation 模型定义
+│   ├── skill_test.go         # 模型单元测试
+│   ├── loader.go             # Loader 接口与 FileLoader 实现
+│   ├── loader_test.go        # 加载器单元测试
+│   ├── registry.go           # Registry 接口与 InMemoryRegistry 实现
+│   ├── registry_test.go      # 注册表单元测试
+│   ├── manager.go            # Manager 接口与 InMemoryManager 实现
+│   ├── manager_test.go       # 管理器单元测试
+│   ├── validator.go          # Validator 接口与内建校验器
+│   ├── validator_test.go     # 校验器单元测试
+│   └── testdata/             # 测试用 Skill 目录
+│       ├── valid-skill/      # 完整 Skill 示例（含 scripts/、references/）
+│       ├── minimal-skill/    # 最小 Skill 示例
+│       └── bad-name/         # 命名不合规 Skill（测试 Discover 不做校验）
+├── schema/
+│   └── event.go              # Skill 相关事件类型和数据结构
+├── agent/llmagent/
+│   └── llm.go                # WithSkillManager、injectSkillInstructions、mergeSkillToolFilter
+├── service/
+│   └── service.go            # WithSkillDir、WithSkillManager、discoverSkills
+└── integrations/skill_tests/ # Skill 集成测试
+    └── skill_test.go
 ```
 
 ### 包依赖关系
 
 ```
-agent ──→ skill (SkillManager)
-skill ──→ tool  (ToolRegistry, 工具白名单验证)
-skill ──→ schema (SkillDef, Event)
-service ──→ skill (Skill 注册与发现)
+agent/llmagent ──→ skill (Manager 接口)
+skill ──→ schema (Event 类型)
+service ──→ skill (Registry、Manager、FileLoader)
 ```
+
+> 注意：skill 包不依赖 tool 包。工具过滤逻辑在 agent/llmagent 中实现，skill 包仅声明 AllowedTools 字段。
 
 ---
 
@@ -401,29 +444,33 @@ service ──→ skill (Skill 注册与发现)
 
 ```go
 // 1. 创建 Skill 加载器和注册表
-loader := skill.NewFileSkillLoader()
-registry := skill.NewRegistry()
+loader := &skill.FileLoader{}
+registry := skill.NewRegistry(skill.WithValidator(skill.DefaultValidator()))
 
 // 2. 发现并注册项目 Skills
-skills, _ := loader.Discover(".skills/")
+skills, _ := loader.Discover(ctx, ".skills/")
 for _, s := range skills {
     registry.Register(s)
 }
 
 // 3. 创建 Skill 管理器
-manager := skill.NewManager(registry, toolRegistry)
+manager := skill.NewManager(registry)
 
 // 4. 创建 Agent 并关联 Skill 管理器
-agent := llmagent.New(
+a := llmagent.New(cfg,
     llmagent.WithSkillManager(manager),
-    // ... 其他配置
+    llmagent.WithChatCompleter(cc),
+    llmagent.WithToolRegistry(toolReg),
 )
 
 // 5. 激活 Skill（在 Run 前或 Run 过程中动态激活）
 manager.Activate(ctx, "pdf-processing", sessionID)
 
 // 6. 执行 Agent
-resp, _ := agent.Run(ctx, req)
+resp, _ := a.Run(ctx, req)
+
+// 7. 会话结束时清理所有 Skill 激活
+manager.ClearSession(ctx, sessionID)
 ```
 
 ### 9.2 动态 Skill 选择
@@ -431,8 +478,8 @@ resp, _ := agent.Run(ctx, req)
 ```go
 // RouterAgent 根据任务描述匹配 Skill
 routeFunc := func(ctx context.Context, req *schema.RunRequest) (*routeragent.RouteResult, error) {
-    query := req.Messages[len(req.Messages)-1].Content
-    matched := skillRegistry.Match(query)
+    query := req.Messages[len(req.Messages)-1].Content.Text()
+    matched := registry.Match(query)
     if len(matched) > 0 {
         manager.Activate(ctx, matched[0].Name, req.SessionID)
     }
@@ -451,18 +498,33 @@ nodes := []orchestrate.Node{
 }
 ```
 
+### 9.4 Service 自动发现
+
+```go
+// Service 启动时自动发现 Skill
+svc := service.New(service.Config{Addr: ":8080"},
+    service.WithSkillDir("./skills"),
+)
+svc.Start(ctx)
+
+// 或注入外部管理器（此时跳过自动发现）
+svc := service.New(service.Config{Addr: ":8080"},
+    service.WithSkillManager(myManager),
+)
+```
+
 ---
 
 ## 10. Skill 组合模式
 
-| 模式         | 说明                                       | vagent 对应                      |
-| ------------ | ------------------------------------------ | -------------------------------- |
-| 顺序链       | Skill 按序激活，前一个的输出作为后一个输入  | WorkflowAgent 顺序模式           |
-| 并行执行     | 多个 Skill 同时激活处理独立子任务           | DAG 并行节点                     |
-| 层级嵌套     | 父 Skill 分解目标为子 Skill                | 嵌套 Agent + Skill 组合          |
-| 路由分派     | 根据意图选择合适的 Skill                   | RouterAgent + Match()            |
-| 渐进式披露   | 按需加载 Skill，避免上下文浪费             | SkillManager.Activate/Deactivate |
-| 生成-评审    | 一个 Skill 生成内容，另一个验证             | 循环节点 + 双 Skill 切换         |
+| 模式         | 说明                                       | vagent 对应                  |
+| ------------ | ------------------------------------------ | ---------------------------- |
+| 顺序链       | Skill 按序激活，前一个的输出作为后一个输入  | WorkflowAgent 顺序模式       |
+| 并行执行     | 多个 Skill 同时激活处理独立子任务           | DAG 并行节点                 |
+| 层级嵌套     | 父 Skill 分解目标为子 Skill                | 嵌套 Agent + Skill 组合      |
+| 路由分派     | 根据意图选择合适的 Skill                   | RouterAgent + Match()        |
+| 渐进式披露   | 按需加载 Skill，避免上下文浪费             | Manager.Activate/Deactivate  |
+| 生成-评审    | 一个 Skill 生成内容，另一个验证             | 循环节点 + 双 Skill 切换     |
 
 ---
 

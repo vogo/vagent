@@ -36,6 +36,12 @@ const (
 	EventLLMCallError = "llm_call_error"
 
 	EventTokenBudgetExhausted = "token_budget_exhausted"
+
+	// Skill lifecycle events.
+	EventSkillDiscover     = "skill_discover"
+	EventSkillActivate     = "skill_activate"
+	EventSkillDeactivate   = "skill_deactivate"
+	EventSkillResourceLoad = "skill_resource_load"
 )
 
 // EventData is a sealed interface for event payloads.
@@ -157,6 +163,39 @@ type LLMCallErrorData struct {
 }
 
 func (LLMCallErrorData) eventData() {}
+
+// SkillDiscoverData carries information about skill discovery.
+type SkillDiscoverData struct {
+	Directory string `json:"directory"`
+	Count     int    `json:"count"`
+}
+
+func (SkillDiscoverData) eventData() {}
+
+// SkillActivateData carries information when a skill is activated.
+type SkillActivateData struct {
+	SkillName string `json:"skill_name"`
+	SessionID string `json:"session_id"`
+}
+
+func (SkillActivateData) eventData() {}
+
+// SkillDeactivateData carries information when a skill is deactivated.
+type SkillDeactivateData struct {
+	SkillName string `json:"skill_name"`
+	SessionID string `json:"session_id"`
+}
+
+func (SkillDeactivateData) eventData() {}
+
+// SkillResourceLoadData carries information when a skill resource is loaded.
+type SkillResourceLoadData struct {
+	SkillName    string `json:"skill_name"`
+	ResourceType string `json:"resource_type"`
+	ResourceName string `json:"resource_name"`
+}
+
+func (SkillResourceLoadData) eventData() {}
 
 // NewEvent creates an Event with the given type, agent ID, session ID, and data.
 func NewEvent(eventType, agentID, sessionID string, data EventData) Event {
