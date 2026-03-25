@@ -20,7 +20,7 @@ package memory
 import (
 	"context"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // ContextCompressor compresses a message history to fit within a token budget.

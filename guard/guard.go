@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // Direction indicates whether a message is input (user->agent) or output (agent->user).

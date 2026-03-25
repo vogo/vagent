@@ -31,7 +31,7 @@ var _ Guard = (*CustomGuard)(nil)
 // NewCustomGuard creates a CustomGuard. Panics if fn is nil.
 func NewCustomGuard(name string, fn CheckFunc) *CustomGuard {
 	if fn == nil {
-		panic("vagent: NewCustomGuard requires a non-nil function")
+		panic("vage: NewCustomGuard requires a non-nil function")
 	}
 
 	return &CustomGuard{name: name, fn: fn}

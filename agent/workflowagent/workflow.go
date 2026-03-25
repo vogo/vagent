@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/orchestrate"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/orchestrate"
+	"github.com/vogo/vage/schema"
 )
 
 type workflowMode int

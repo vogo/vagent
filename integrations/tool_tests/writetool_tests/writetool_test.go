@@ -25,10 +25,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vogo/vagent/schema"
-	"github.com/vogo/vagent/tool"
-	"github.com/vogo/vagent/tool/toolkit"
-	"github.com/vogo/vagent/tool/writetool"
+	"github.com/vogo/vage/schema"
+	"github.com/vogo/vage/tool"
+	"github.com/vogo/vage/tool/toolkit"
+	"github.com/vogo/vage/tool/writetool"
 )
 
 // ---------- Registration Integration Tests ----------

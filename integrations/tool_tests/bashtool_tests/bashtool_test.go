@@ -31,12 +31,12 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/agent/taskagent"
-	"github.com/vogo/vagent/prompt"
-	"github.com/vogo/vagent/schema"
-	"github.com/vogo/vagent/tool"
-	"github.com/vogo/vagent/tool/bashtool"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/agent/taskagent"
+	"github.com/vogo/vage/prompt"
+	"github.com/vogo/vage/schema"
+	"github.com/vogo/vage/tool"
+	"github.com/vogo/vage/tool/bashtool"
 )
 
 // ---------- Helper ----------
@@ -670,7 +670,7 @@ func TestBashToolWithLLMAgent(t *testing.T) {
 
 	resp, err := a.Run(ctx, &schema.RunRequest{
 		Messages: []schema.Message{
-			schema.NewUserMessage("Execute exactly this bash command and report the output verbatim: `echo vagent-test-ok`"),
+			schema.NewUserMessage("Execute exactly this bash command and report the output verbatim: `echo vage-test-ok`"),
 		},
 	})
 	if err != nil {
@@ -687,7 +687,7 @@ func TestBashToolWithLLMAgent(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(responseText, "vagent-test-ok") {
-		t.Errorf("expected response to contain 'vagent-test-ok', got: %s", responseText)
+	if !strings.Contains(responseText, "vage-test-ok") {
+		t.Errorf("expected response to contain 'vage-test-ok', got: %s", responseText)
 	}
 }

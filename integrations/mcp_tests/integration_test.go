@@ -26,11 +26,11 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/vogo/vagent/agent"
-	mcpclient "github.com/vogo/vagent/mcp/client"
-	mcpserver "github.com/vogo/vagent/mcp/server"
-	"github.com/vogo/vagent/schema"
-	"github.com/vogo/vagent/tool"
+	"github.com/vogo/vage/agent"
+	mcpclient "github.com/vogo/vage/mcp/client"
+	mcpserver "github.com/vogo/vage/mcp/server"
+	"github.com/vogo/vage/schema"
+	"github.com/vogo/vage/tool"
 )
 
 // TestClientCallsServerTools tests the scenario where an MCP client discovers
@@ -144,7 +144,7 @@ func (e *echoAgent) Run(_ context.Context, req *schema.RunRequest) (*schema.RunR
 	}, nil
 }
 
-// TestAgentExposedAsMCPTool tests the scenario where a vagent Agent is
+// TestAgentExposedAsMCPTool tests the scenario where a vage Agent is
 // registered on an MCP server and invoked by an MCP client.
 func TestAgentExposedAsMCPTool(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

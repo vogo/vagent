@@ -27,9 +27,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/skill"
-	"github.com/vogo/vagent/tool"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/skill"
+	"github.com/vogo/vage/tool"
 )
 
 const (

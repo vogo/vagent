@@ -27,8 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vogo/vagent/orchestrate"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/orchestrate"
+	"github.com/vogo/vage/schema"
 )
 
 // =============================================================================

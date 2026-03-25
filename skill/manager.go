@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // EventDispatcher is a callback for dispatching events without importing the hook package.

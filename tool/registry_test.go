@@ -22,7 +22,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func echoHandler(_ context.Context, name, args string) (schema.ToolResult, error) {

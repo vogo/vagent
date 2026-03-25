@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func TestTokenBudgetCompressor(t *testing.T) {

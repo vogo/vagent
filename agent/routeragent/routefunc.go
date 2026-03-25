@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // FirstFunc always selects the first route.

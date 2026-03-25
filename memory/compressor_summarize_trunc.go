@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // Summarizer is a function that summarizes messages into a single text string.

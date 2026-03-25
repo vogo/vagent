@@ -28,15 +28,15 @@ import (
 	"testing"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/agent/taskagent"
-	"github.com/vogo/vagent/guard"
-	"github.com/vogo/vagent/hook"
-	"github.com/vogo/vagent/largemodel"
-	"github.com/vogo/vagent/memory"
-	"github.com/vogo/vagent/prompt"
-	"github.com/vogo/vagent/schema"
-	"github.com/vogo/vagent/tool"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/agent/taskagent"
+	"github.com/vogo/vage/guard"
+	"github.com/vogo/vage/hook"
+	"github.com/vogo/vage/largemodel"
+	"github.com/vogo/vage/memory"
+	"github.com/vogo/vage/prompt"
+	"github.com/vogo/vage/schema"
+	"github.com/vogo/vage/tool"
 )
 
 func TestTaskAgentIntegration(t *testing.T) {

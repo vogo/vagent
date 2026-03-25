@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // mockRunner is a test helper that executes a function.

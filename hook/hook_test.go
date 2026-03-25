@@ -21,7 +21,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func TestHookFunc_OnEvent(t *testing.T) {

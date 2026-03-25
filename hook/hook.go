@@ -20,7 +20,7 @@ package hook
 import (
 	"context"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // Hook is a synchronous event observer. OnEvent is called inline during

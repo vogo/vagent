@@ -21,7 +21,7 @@ import (
 	"context"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // EvalCase represents a single evaluation test case.

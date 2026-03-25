@@ -24,13 +24,13 @@ import (
 	"testing"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/agent/taskagent"
-	"github.com/vogo/vagent/largemodel"
-	"github.com/vogo/vagent/prompt"
-	"github.com/vogo/vagent/schema"
-	"github.com/vogo/vagent/tool"
-	"github.com/vogo/vagent/tool/agenttool"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/agent/taskagent"
+	"github.com/vogo/vage/largemodel"
+	"github.com/vogo/vage/prompt"
+	"github.com/vogo/vage/schema"
+	"github.com/vogo/vage/tool"
+	"github.com/vogo/vage/tool/agenttool"
 )
 
 // TestAgentAsToolIntegration verifies that a coordinator TaskAgent can delegate

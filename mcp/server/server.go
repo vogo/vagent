@@ -24,8 +24,8 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/schema"
 )
 
 // ToolRegistration describes a tool to register on the MCP server.
@@ -56,7 +56,7 @@ var _ MCPServer = (*Server)(nil)
 // NewServer creates a new MCP server.
 func NewServer() *Server {
 	s := mcp.NewServer(&mcp.Implementation{
-		Name:    "vagent-mcp-server",
+		Name:    "vage-mcp-server",
 		Version: "1.0.0",
 	}, nil)
 	return &Server{server: s}
@@ -72,7 +72,7 @@ func (s *Server) Serve(ctx context.Context, transport mcp.Transport) error {
 	return s.server.Run(ctx, transport)
 }
 
-// RegisterAgent registers a vagent Agent as an MCP tool.
+// RegisterAgent registers a vage Agent as an MCP tool.
 // The tool name is the agent ID and the description is the agent description.
 func (s *Server) RegisterAgent(a agent.Agent) error {
 	s.mu.Lock()

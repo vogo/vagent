@@ -1,7 +1,7 @@
-# vagent
+# vage
 
-[![Build](https://github.com/vogo/vagent/actions/workflows/build.yml/badge.svg)](https://github.com/vogo/vagent/actions/workflows/build.yml)
-[![codecov](https://codecov.io/gh/vogo/vagent/branch/main/graph/badge.svg)](https://codecov.io/gh/vogo/vagent)
+[![Build](https://github.com/vogo/vage/actions/workflows/build.yml/badge.svg)](https://github.com/vogo/vage/actions/workflows/build.yml)
+[![codecov](https://codecov.io/gh/vogo/vage/branch/main/graph/badge.svg)](https://codecov.io/gh/vogo/vage)
 
 
 A Go framework for building LLM-based intelligent agent systems.
@@ -23,7 +23,7 @@ A Go framework for building LLM-based intelligent agent systems.
 ## Installation
 
 ```bash
-go get github.com/vogo/vagent
+go get github.com/vogo/vage
 ```
 
 ## Quick Start
@@ -35,8 +35,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/schema"
 )
 
 func main() {

@@ -20,7 +20,7 @@ package memory
 import (
 	"context"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // ChainCompressor applies multiple compressors in sequence, passing the output

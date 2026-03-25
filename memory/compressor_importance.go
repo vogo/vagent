@@ -22,7 +22,7 @@ import (
 	"sort"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // MessageScorer assigns an importance score to a message.

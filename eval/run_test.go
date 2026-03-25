@@ -22,7 +22,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func TestRunAndEvaluate(t *testing.T) {

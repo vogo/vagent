@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 var _ Evaluator = (*ToolCallEval)(nil)

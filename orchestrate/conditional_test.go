@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func TestConditionalNode_Validate_ExhaustiveNoDefault(t *testing.T) {

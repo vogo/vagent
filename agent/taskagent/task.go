@@ -28,14 +28,14 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/guard"
-	"github.com/vogo/vagent/hook"
-	"github.com/vogo/vagent/memory"
-	"github.com/vogo/vagent/prompt"
-	"github.com/vogo/vagent/schema"
-	"github.com/vogo/vagent/skill"
-	"github.com/vogo/vagent/tool"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/guard"
+	"github.com/vogo/vage/hook"
+	"github.com/vogo/vage/memory"
+	"github.com/vogo/vage/prompt"
+	"github.com/vogo/vage/schema"
+	"github.com/vogo/vage/skill"
+	"github.com/vogo/vage/tool"
 )
 
 const defaultMaxIterations = 10
@@ -232,7 +232,7 @@ func (a *Agent) buildInitialMessages(ctx context.Context, reqMsgs []schema.Messa
 	if a.systemPrompt != nil {
 		sysText, err := a.systemPrompt.Render(ctx, nil)
 		if err != nil {
-			return buildResult{}, fmt.Errorf("vagent: render system prompt: %w", err)
+			return buildResult{}, fmt.Errorf("vage: render system prompt: %w", err)
 		}
 
 		if sysText != "" {
@@ -259,7 +259,7 @@ func (a *Agent) loadAndCompressSessionHistory(ctx context.Context) ([]schema.Mes
 
 	loaded, err := a.loadSessionMessages(ctx)
 	if err != nil {
-		slog.Warn("vagent: load session messages", "error", err)
+		slog.Warn("vage: load session messages", "error", err)
 		return nil, 0
 	}
 
@@ -268,7 +268,7 @@ func (a *Agent) loadAndCompressSessionHistory(ctx context.Context) ([]schema.Mes
 	if c := a.memoryManager.Compressor(); c != nil && len(loaded) > 0 {
 		compressed, compErr := c.Compress(ctx, loaded, 0)
 		if compErr != nil {
-			slog.Warn("vagent: compress session messages", "error", compErr)
+			slog.Warn("vage: compress session messages", "error", compErr)
 		} else {
 			loaded = compressed
 		}
@@ -297,7 +297,7 @@ func (a *Agent) loadSessionMessages(ctx context.Context) ([]schema.Message, erro
 	for _, e := range entries {
 		msg, ok := e.Value.(schema.Message)
 		if !ok {
-			slog.Warn("vagent: unexpected entry type in session", "key", e.Key, "type", fmt.Sprintf("%T", e.Value))
+			slog.Warn("vage: unexpected entry type in session", "key", e.Key, "type", fmt.Sprintf("%T", e.Value))
 			continue
 		}
 
@@ -536,7 +536,7 @@ func (a *Agent) finalizeRun(ctx context.Context, rc *runContext, stopReason sche
 	guardedMsgs, err := a.runOutputGuards(ctx, rc.sessionID, respMsgs)
 	if err != nil {
 		if partial {
-			slog.Warn("vagent: output guard on partial result", "error", err, "stop_reason", stopReason)
+			slog.Warn("vage: output guard on partial result", "error", err, "stop_reason", stopReason)
 		}
 		// For normal completion, we still use the unguarded messages rather than failing.
 	} else {
@@ -594,7 +594,7 @@ func (a *Agent) finalizeStream(
 	guardedMsgs, err := a.runOutputGuards(ctx, rc.sessionID, respMsgs)
 	if err != nil {
 		if partial {
-			slog.Warn("vagent: output guard on partial stream result", "error", err, "stop_reason", stopReason)
+			slog.Warn("vage: output guard on partial stream result", "error", err, "stop_reason", stopReason)
 		} else {
 			return err
 		}
@@ -632,7 +632,7 @@ func (a *Agent) finalizeStream(
 // Run executes the ReAct loop: prompt -> LLM -> tool calls (loop) -> response.
 func (a *Agent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
 	if a.chatCompleter == nil {
-		return nil, errors.New("vagent: ChatCompleter is required")
+		return nil, errors.New("vage: ChatCompleter is required")
 	}
 
 	// Run input guards before processing.
@@ -683,14 +683,14 @@ func (a *Agent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunRes
 
 		resp, err := a.chatCompleter.ChatCompletion(ctx, chatReq)
 		if err != nil {
-			return nil, fmt.Errorf("vagent: chat completion: %w", err)
+			return nil, fmt.Errorf("vage: chat completion: %w", err)
 		}
 
 		rc.totalUsage.Add(&resp.Usage)
 		rc.tracker.Add(resp.Usage.TotalTokens)
 
 		if len(resp.Choices) == 0 {
-			return nil, errors.New("vagent: empty response from LLM")
+			return nil, errors.New("vage: empty response from LLM")
 		}
 
 		choice := resp.Choices[0]
@@ -752,7 +752,7 @@ func (a *Agent) storeAndPromoteMessages(ctx context.Context, sessionID string, r
 	for _, msg := range reqMsgs {
 		key := fmt.Sprintf("msg:%06d", idx)
 		if err := working.Set(ctx, key, msg, 0); err != nil {
-			slog.Warn("vagent: store request message", "error", err)
+			slog.Warn("vage: store request message", "error", err)
 		}
 
 		idx++
@@ -761,14 +761,14 @@ func (a *Agent) storeAndPromoteMessages(ctx context.Context, sessionID string, r
 	for _, msg := range respMsgs {
 		key := fmt.Sprintf("msg:%06d", idx)
 		if err := working.Set(ctx, key, msg, 0); err != nil {
-			slog.Warn("vagent: store response message", "error", err)
+			slog.Warn("vage: store response message", "error", err)
 		}
 
 		idx++
 	}
 
 	if err := a.memoryManager.PromoteToSession(ctx, working); err != nil {
-		slog.Warn("vagent: promote to session", "error", err)
+		slog.Warn("vage: promote to session", "error", err)
 	}
 }
 
@@ -792,7 +792,7 @@ func (a *Agent) buildSend(ctx context.Context, raw func(schema.Event) error) fun
 // RunStream returns a RunStream that emits events as the ReAct loop executes.
 func (a *Agent) RunStream(ctx context.Context, req *schema.RunRequest) (*schema.RunStream, error) {
 	if a.chatCompleter == nil {
-		return nil, errors.New("vagent: ChatCompleter is required")
+		return nil, errors.New("vage: ChatCompleter is required")
 	}
 
 	// Run input guards before processing.
@@ -869,7 +869,7 @@ func (a *Agent) runStreamLoop(
 
 		stream, err := a.chatCompleter.ChatCompletionStream(ctx, chatReq)
 		if err != nil {
-			return fmt.Errorf("vagent: chat completion stream: %w", err)
+			return fmt.Errorf("vage: chat completion stream: %w", err)
 		}
 
 		var accumulated aimodel.Message
@@ -884,7 +884,7 @@ func (a *Agent) runStreamLoop(
 			}
 			if recvErr != nil {
 				_ = stream.Close()
-				return fmt.Errorf("vagent: stream recv: %w", recvErr)
+				return fmt.Errorf("vage: stream recv: %w", recvErr)
 			}
 
 			if len(chunk.Choices) == 0 {

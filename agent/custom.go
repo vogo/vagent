@@ -21,7 +21,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // CustomAgent delegates its Run to a user-provided RunFunc.
@@ -43,7 +43,7 @@ func NewCustomAgent(cfg Config, fn RunFunc) *CustomAgent {
 // Run delegates to the configured RunFunc. Returns an error if RunFunc is nil.
 func (a *CustomAgent) Run(ctx context.Context, req *schema.RunRequest) (*schema.RunResponse, error) {
 	if a.runFunc == nil {
-		return nil, errors.New("vagent: CustomAgent has no RunFunc configured")
+		return nil, errors.New("vage: CustomAgent has no RunFunc configured")
 	}
 	return a.runFunc(ctx, req)
 }

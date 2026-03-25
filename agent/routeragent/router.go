@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/schema"
 )
 
 // Route pairs an Agent with a description used for routing decisions.

@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func TestTimelineTracker_Basic(t *testing.T) {

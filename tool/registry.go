@@ -23,7 +23,7 @@ import (
 	"sync"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 type entry struct {

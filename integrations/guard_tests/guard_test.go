@@ -24,8 +24,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vogo/vagent/guard"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/guard"
+	"github.com/vogo/vage/schema"
 )
 
 // =============================================================================

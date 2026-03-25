@@ -20,7 +20,7 @@ package memory
 import (
 	"context"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // TokenBudgetCompressor keeps the most recent messages that fit within a token budget.

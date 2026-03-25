@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 type spawnDepthKey struct{}

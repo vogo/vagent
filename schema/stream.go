@@ -26,7 +26,7 @@ import (
 )
 
 // ErrRunStreamClosed is returned when Recv is called on a closed RunStream.
-var ErrRunStreamClosed = errors.New("vagent: run stream is closed")
+var ErrRunStreamClosed = errors.New("vage: run stream is closed")
 
 // StreamProducer is the function signature for producing stream events.
 // The producer receives a context (canceled on Close) and a send function to emit events.

@@ -22,7 +22,7 @@ import (
 	"maps"
 	"sync"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // CheckpointStore persists node results for resume and replay.

@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // compensatableRunner is a test runner that implements Compensatable.

@@ -23,7 +23,7 @@ import (
 	"math"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // makeResponse creates a RunResponse with a single assistant message.

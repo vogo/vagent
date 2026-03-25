@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/memory"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/memory"
+	"github.com/vogo/vage/schema"
 )
 
 // =============================================================================

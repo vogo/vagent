@@ -42,7 +42,7 @@ func NewPIIGuard(cfg PIIConfig) *PIIGuard {
 
 	for i, p := range patterns {
 		if p.Pattern == nil {
-			panic("vagent: NewPIIGuard: pattern " + itoa(i) + " (" + p.Name + ") has nil regexp")
+			panic("vage: NewPIIGuard: pattern " + itoa(i) + " (" + p.Name + ") has nil regexp")
 		}
 	}
 

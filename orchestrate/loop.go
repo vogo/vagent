@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // ExecuteLoop runs a loop with the given body runner and termination conditions.

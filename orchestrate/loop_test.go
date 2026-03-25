@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func TestExecuteLoop_BasicIteration(t *testing.T) {

@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func TestPriorityQueue_BasicOrdering(t *testing.T) {

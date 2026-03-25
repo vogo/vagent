@@ -26,9 +26,9 @@ import (
 	"time"
 
 	"github.com/vogo/aimodel"
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/agent/routeragent"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/agent/routeragent"
+	"github.com/vogo/vage/schema"
 )
 
 // --- Integration test helpers (black-box, external package) ---

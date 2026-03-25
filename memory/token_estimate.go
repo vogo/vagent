@@ -18,7 +18,7 @@
 package memory
 
 import (
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // TokenEstimator estimates the token count for a message.

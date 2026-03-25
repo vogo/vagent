@@ -21,8 +21,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/vogo/vagent/agent"
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/agent"
+	"github.com/vogo/vage/schema"
 )
 
 func TestServiceRegisterAgent(t *testing.T) {

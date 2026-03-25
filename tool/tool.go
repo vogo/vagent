@@ -20,7 +20,7 @@ package tool
 import (
 	"context"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // ToolHandler is a function that handles a tool invocation.

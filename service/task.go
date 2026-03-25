@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // TaskStatus represents the lifecycle state of an async task.

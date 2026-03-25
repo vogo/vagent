@@ -24,8 +24,8 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/vogo/vagent/schema"
-	"github.com/vogo/vagent/tool"
+	"github.com/vogo/vage/schema"
+	"github.com/vogo/vage/tool"
 )
 
 // Lifecycle manages the connection lifecycle of an MCP client.
@@ -56,7 +56,7 @@ var _ MCPClient = (*Client)(nil)
 // NewClient creates a new MCP client.
 func NewClient(serverURI string) *Client {
 	c := mcp.NewClient(&mcp.Implementation{
-		Name:    "vagent-mcp-client",
+		Name:    "vage-mcp-client",
 		Version: "1.0.0",
 	}, nil)
 	return &Client{

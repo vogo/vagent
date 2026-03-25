@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // Compensatable is implemented by Runners that support compensation (rollback).

@@ -49,7 +49,7 @@ func RunGuards(ctx context.Context, msg *Message, guards ...Guard) (*Result, err
 		}
 
 		if result == nil {
-			return nil, fmt.Errorf("vagent: guard %q returned nil result", g.Name())
+			return nil, fmt.Errorf("vage: guard %q returned nil result", g.Name())
 		}
 
 		switch result.Action {
@@ -62,7 +62,7 @@ func RunGuards(ctx context.Context, msg *Message, guards ...Guard) (*Result, err
 		case ActionPass:
 			// continue
 		default:
-			return nil, fmt.Errorf("vagent: guard %q returned unknown action %q", g.Name(), result.Action)
+			return nil, fmt.Errorf("vage: guard %q returned unknown action %q", g.Name(), result.Action)
 		}
 	}
 

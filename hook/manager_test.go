@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // --- test helpers ---

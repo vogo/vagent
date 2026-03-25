@@ -21,7 +21,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 func TestTaskStore_CreateAndGet(t *testing.T) {

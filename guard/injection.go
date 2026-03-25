@@ -41,7 +41,7 @@ func NewPromptInjectionGuard(cfg PromptInjectionConfig) *PromptInjectionGuard {
 
 	for i, p := range patterns {
 		if p.Pattern == nil {
-			panic("vagent: NewPromptInjectionGuard: pattern " + itoa(i) + " (" + p.Name + ") has nil regexp")
+			panic("vage: NewPromptInjectionGuard: pattern " + itoa(i) + " (" + p.Name + ") has nil regexp")
 		}
 	}
 

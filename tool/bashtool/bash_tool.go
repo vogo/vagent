@@ -28,8 +28,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/vogo/vagent/schema"
-	"github.com/vogo/vagent/tool"
+	"github.com/vogo/vage/schema"
+	"github.com/vogo/vage/tool"
 )
 
 const (

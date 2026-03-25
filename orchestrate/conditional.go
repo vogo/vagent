@@ -21,7 +21,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/vogo/vagent/schema"
+	"github.com/vogo/vage/schema"
 )
 
 // Branch represents a conditional branch with a condition function and target node ID.
