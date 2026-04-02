@@ -782,7 +782,12 @@ func (a *Agent) buildSend(ctx context.Context, raw func(schema.Event) error) fun
 
 	next := send
 	send = func(e schema.Event) error {
-		a.hookManager.Dispatch(ctx, e)
+		// Skip hook dispatch for LLM lifecycle events — MetricsMiddleware
+		// already dispatches these directly to hooks to avoid double-counting.
+		if e.Type != schema.EventLLMCallEnd {
+			a.hookManager.Dispatch(ctx, e)
+		}
+
 		return next(e)
 	}
 
@@ -918,6 +923,16 @@ func (a *Agent) runStreamLoop(
 		if streamUsage != nil {
 			rc.totalUsage.Add(streamUsage)
 			rc.tracker.Add(streamUsage.TotalTokens)
+
+			// Emit through the stream pipeline so downstream consumers
+			// (CLI, phase trackers) can observe token usage.
+			_ = send(schema.NewEvent(schema.EventLLMCallEnd, agentID, rc.sessionID, schema.LLMCallEndData{
+				Model:            chatReq.Model,
+				PromptTokens:     streamUsage.PromptTokens,
+				CompletionTokens: streamUsage.CompletionTokens,
+				TotalTokens:      streamUsage.TotalTokens,
+				Stream:           true,
+			}))
 		} else {
 			// Estimate token usage from stream bytes (4 bytes per token heuristic).
 			estimatedTokens := (streamBytes + 3) / 4
