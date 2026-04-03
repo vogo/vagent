@@ -90,6 +90,7 @@ func (gt *GrepTool) ToolDef() schema.ToolDef {
 		Name:        grepToolName,
 		Description: grepToolDescription,
 		Source:      schema.ToolSourceLocal,
+		ReadOnly:    true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

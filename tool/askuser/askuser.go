@@ -81,6 +81,7 @@ func (t *AskUserTool) ToolDef() schema.ToolDef {
 		Name:        ToolName,
 		Description: toolDescription,
 		Source:      schema.ToolSourceLocal,
+		ReadOnly:    true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

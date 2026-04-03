@@ -35,4 +35,5 @@ type ToolDef struct {
 	Source       string `json:"source,omitempty"` // e.g. "local", "mcp", "agent"
 	MCPServerURI string `json:"mcp_server_uri,omitempty"`
 	AgentID      string `json:"agent_id,omitempty"`
+	ReadOnly     bool   `json:"read_only,omitempty"`
 }

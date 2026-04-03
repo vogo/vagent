@@ -77,6 +77,7 @@ func (rt *ReadTool) ToolDef() schema.ToolDef {
 		Name:        toolName,
 		Description: toolDescription,
 		Source:      schema.ToolSourceLocal,
+		ReadOnly:    true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

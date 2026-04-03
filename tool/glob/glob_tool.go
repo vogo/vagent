@@ -102,6 +102,7 @@ func (gt *GlobTool) ToolDef() schema.ToolDef {
 		Name:        globToolName,
 		Description: globToolDescription,
 		Source:      schema.ToolSourceLocal,
+		ReadOnly:    true,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
